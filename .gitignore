@@ -3,6 +3,10 @@ node_modules/
 # build
 dist/
 dist-server/
+*.tsbuildinfo
+*.js
+*.d.ts
+!*.ts
 *.local
 # env
 .env

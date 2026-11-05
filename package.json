@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "server": "tsx server/src/ws.ts",
     "server:build": "tsc -p server/tsconfig.json",
-    "test": "vitest run",
+    "test": "vitest run --root .",
     "test:watch": "vitest",
     "typecheck": "tsc -b",
     "lint": "tsc -b --noEmit"

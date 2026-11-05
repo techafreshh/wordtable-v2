@@ -8,7 +8,7 @@
     "isolatedModules": true,
     "moduleDetection": "force",
     "outDir": "../dist-server",
-    "rootDir": ".",
+    "rootDir": "..",
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,

@@ -1,0 +1,27 @@
+/* GSAP-adjacent CSS keyframes for commit / reject / deal motion */
+
+@keyframes slam-in {
+  from { transform: translateY(-14px) scale(1.15); }
+  to   { transform: translateY(0) scale(1); }
+}
+
+@keyframes shake-x {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-6px); }
+  75% { transform: translateX(6px); }
+}
+
+@keyframes float-up {
+  from { transform: translateY(0); opacity: 1; }
+  to   { transform: translateY(-32px); opacity: 0; }
+}
+
+@keyframes deal-in {
+  from { transform: translateY(12px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+
+.tile.slam { animation: slam-in 180ms cubic-bezier(.2,.9,.3,1.2); }
+.rack.shake { animation: shake-x 240ms ease; }
+.score-float { animation: float-up 900ms ease-out; }
+.tile.deal { animation: deal-in 260ms ease both; }

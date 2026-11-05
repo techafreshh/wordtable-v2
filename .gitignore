@@ -1,0 +1,17 @@
+# deps
+node_modules/
+# build
+dist/
+dist-server/
+*.local
+# env
+.env
+.env.*
+!.env.example
+# editor / os
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea/
+# logs
+*.log

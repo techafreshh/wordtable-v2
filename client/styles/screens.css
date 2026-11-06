@@ -1,0 +1,333 @@
+/* Canonical warm-club screen stylesheet. The bundled copy at
+ * client/src/styles/screens.css mirrors this file byte-for-byte below
+ * this header. Covers the offline hot-seat screens (start, setup, lobby,
+ * table strip extras, recap) in the contracted naming style. */
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  width: min(94vw, 600px);
+  margin: 0 auto;
+  padding: 1rem 0.75rem 1.25rem;
+}
+
+.screen-title {
+  margin: 0;
+  color: var(--ivory);
+  font-size: 1.5rem;
+  letter-spacing: 0.04em;
+}
+
+.screen-sub {
+  margin: 0;
+  color: var(--ivory-dim);
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+}
+
+.nick-label {
+  color: var(--ivory-dim);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+#nickname {
+  width: min(80vw, 280px);
+  min-height: 44px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--brass);
+  background: var(--wood-dark);
+  color: var(--ivory);
+  font-family: var(--font-stack);
+  font-size: 1rem;
+  padding: 0.5rem 0.75rem;
+  text-align: center;
+}
+
+.screen-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.screen-actions button,
+#start-game,
+#lobby-start,
+#lobby-edit,
+#pass-button,
+#rematch {
+  min-width: 44px;
+  min-height: 44px;
+  border: none;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  padding: 0.6rem 1.4rem;
+  font-family: var(--font-stack);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.screen-actions button[data-action="create"],
+.screen-actions button[data-action="join"],
+#lobby-edit {
+  background: var(--brass);
+  color: var(--wood-dark);
+}
+
+.screen-actions button[data-action="play"],
+#lobby-start,
+#pass-button,
+#rematch,
+#start-game {
+  background: var(--felt-bright);
+  color: var(--ivory);
+  border: 1px solid var(--brass);
+}
+
+.seat-count {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.seat-count button {
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid var(--brass);
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  padding: 0.5rem 0.9rem;
+  font-family: var(--font-stack);
+  font-weight: 700;
+  background: var(--wood-dark);
+  color: var(--ivory-dim);
+}
+
+.seat-count button.selected {
+  background: var(--brass);
+  color: var(--wood-dark);
+}
+
+#seat-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: min(90vw, 420px);
+}
+
+#seat-picker .seat {
+  width: 100%;
+  justify-content: space-between;
+}
+
+.seat-num {
+  flex: 0 0 auto;
+  min-width: 2ch;
+  text-align: center;
+  color: var(--brass-hot);
+  font-weight: 700;
+}
+
+.seat-name {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+#seat-picker .seat-name {
+  flex: 1 1 auto;
+}
+
+input.seat-name {
+  min-height: 44px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--brass);
+  background: var(--wood-dark);
+  color: var(--ivory);
+  font-family: var(--font-stack);
+  font-size: 1rem;
+  padding: 0.45rem 0.6rem;
+}
+
+.bot-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 44px;
+  cursor: pointer;
+  color: var(--ivory-dim);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+input.seat-bot {
+  width: 22px;
+  height: 22px;
+  accent-color: var(--brass);
+  cursor: pointer;
+}
+
+input.seat-bot:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.bot-label {
+  line-height: 1;
+}
+
+#lobby {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.lobby-seats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: min(90vw, 420px);
+}
+
+.lobby-seats .seat {
+  width: 100%;
+  justify-content: space-between;
+}
+
+.seat.bot {
+  border-color: var(--felt-bright);
+}
+
+.bot-badge {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--felt-bright);
+  color: var(--ivory);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.2rem 0.6rem;
+  text-transform: uppercase;
+}
+
+#score-line {
+  display: inline-block;
+  padding: 0.3rem 0.9rem;
+  border-radius: 999px;
+  background: var(--wood-dark);
+  color: var(--brass-hot);
+  border: 1px solid var(--brass);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}
+
+#turn-line {
+  color: var(--ivory-dim);
+  font-size: 0.9rem;
+  letter-spacing: 0.02em;
+}
+
+.podium {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: min(90vw, 420px);
+}
+
+.podium-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.8rem;
+  border-radius: var(--radius-md);
+  background: var(--wood-dark);
+  border: 1px solid transparent;
+  color: var(--ivory-dim);
+  font-weight: 700;
+}
+
+.podium-row.winner {
+  color: var(--ivory);
+  border-color: var(--brass);
+  outline: 2px solid var(--brass);
+  outline-offset: 1px;
+  box-shadow: 0 0 0 3px rgba(232, 201, 122, 0.45), 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.podium-rank {
+  flex: 0 0 auto;
+  min-width: 2ch;
+  text-align: center;
+  color: var(--brass-hot);
+}
+
+.podium-row .seat-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.podium-row .seat-score {
+  margin-left: auto;
+  color: var(--brass-hot);
+  font-variant-numeric: tabular-nums;
+}
+
+#word-history {
+  width: min(90vw, 420px);
+  max-height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0.75rem;
+  list-style: none;
+  border-radius: var(--radius-md);
+  background: var(--wood-dark);
+  border: 1px solid var(--brass);
+}
+
+#word-history li {
+  color: var(--ivory);
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+#word-history .history-empty {
+  color: var(--ivory-dim);
+  font-style: italic;
+}
+
+.board-host {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.tile.committed {
+  outline: 1px solid rgba(61, 43, 18, 0.55);
+  outline-offset: -1px;
+}
+
+@media (max-width: 480px) {
+  .screen { padding: 0.75rem 0.5rem 1rem; gap: 0.6rem; }
+  .screen-title { font-size: 1.25rem; }
+  .screen-actions button,
+  #start-game,
+  #lobby-start,
+  #lobby-edit,
+  #pass-button,
+  #rematch { padding: 0.5rem 1rem; font-size: 0.95rem; }
+  #seat-picker .seat { font-size: 0.9rem; }
+  input.seat-name { font-size: 0.95rem; }
+  .podium-row { font-size: 0.9rem; }
+  #word-history { font-size: 0.85rem; max-height: 180px; }
+}

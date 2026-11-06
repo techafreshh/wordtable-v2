@@ -3,7 +3,7 @@
 
 import { createStore } from 'zustand/vanilla'
 
-export type Screen = 'table'
+export type Screen = 'start' | 'setup' | 'lobby' | 'table' | 'recap'
 
 // A blank tile awaiting its letter: tap-tile→tap-square (or a drop) parks
 // the placement here and opens #blank-picker instead of adding an
@@ -44,6 +44,7 @@ interface UiState {
   chatOpen: boolean
   unread: number
   select: (sq: string | null) => void
+  setScreen: (screen: Screen) => void
   selectRack: (index: number | null) => void
   showToast: (msg: string) => void
   clearToast: () => void
@@ -82,7 +83,7 @@ function disarmToastTimer(): void {
 }
 
 export const uiStore = createStore<UiState>()((set, get) => ({
-  screen: 'table',
+  screen: 'start',
   selected: null,
   selectedRack: null,
   toast: null,
@@ -95,6 +96,7 @@ export const uiStore = createStore<UiState>()((set, get) => ({
   chatOpen: false,
   unread: 0,
   select: (sq) => set({ selected: sq }),
+  setScreen: (screen) => set({ screen }),
   // Transient tap-tap cursor for rack→square placement. The game store is
   // the placement authority; this mirrors its selectedRack for components
   // that only read UI state. Cleared on every successful place and recall.

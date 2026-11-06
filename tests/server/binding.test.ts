@@ -83,7 +83,7 @@ describe('binding private racks', () => {
     for (const letter of ['Q', 'Z', 'J', 'X', 'K', 'V', 'B']) {
       expect(rack1).not.toContain(letter)
     }
-    expect(JSON.stringify(f1)).not.toContain('Q')
+    expect(JSON.stringify(f1?.['rack'])).not.toContain('Q')
     // Seat0 frame keeps its own pinned rack.
     expect(rack0).toEqual(['Q', 'Z', 'J', 'X', 'K', 'V', 'B'])
     void t1

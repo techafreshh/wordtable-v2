@@ -5,6 +5,8 @@ import { LocalGame, type PlaceSpec } from '../../shared/engine/local.js'
 import type { Lexicon } from '../../shared/engine/rules.js'
 import { parseSquare, toAlgebra } from '../../shared/engine/board.js'
 import type { Tile } from '../../shared/engine/bag.js'
+import { generateBotMove } from '../../shared/engine/bot.js'
+import { BOT_NAME, botThinkDelayMs } from './bot-seat.js'
 import {
   RoomRegistry,
   normalizeCode,
@@ -32,6 +34,8 @@ export interface RoomEntry {
   timerOn: boolean
   turnSecs: number
   timer: TurnTimer
+  seed: number
+  botTimer: ReturnType<typeof setTimeout> | null
 }
 
 // Case-insensitive lookup after trim: `CODE`, `Room_Code`, `METHOD` etc.
@@ -98,7 +102,7 @@ const KNOWN_METHODS = new Set([
 ])
 
 // Out of scope for this lap (owned by bot/client issues): still BAD_STATE.
-const STILL_UNBOUND = new Set(['add_bot', 'remove_bot', 'rematch'])
+const STILL_UNBOUND = new Set(['rematch'])
 
 // Chat text contract (issue #16): trim, reject blank/non-string, truncate
 // to 200 chars. Long input truncates — it is never rejected.
@@ -284,6 +288,129 @@ export function createBinding(registry: RoomRegistry, opts: CreateBindingOpts) {
     entry.timer.arm(ms, () => autoPass(code))
   }
 
+  function disarmBot(code: string): void {
+    const entry = entries.get(code)
+    if (!entry) return
+    if (entry.botTimer !== null) {
+      clearTimeout(entry.botTimer)
+      entry.botTimer = null
+    }
+  }
+
+  function seatsInfoFor(code: string): Array<Record<string, unknown>> {
+    const room = registry.get(code)
+    if (!room) return []
+    return room.seats.map((s) => ({ seat: s.seat, name: s.name, is_bot: !!s.isBot }))
+  }
+
+  function maybeScheduleBot(code: string): void {
+    disarmBot(code)
+    const entry = entries.get(code)
+    const room = registry.get(code)
+    if (!entry || !room) return
+    if (entry.game.getState().status !== 'PLAYING') return
+    const turn = entry.game.getState().turn
+    const seatObj = room.seats.find((s) => s.seat === turn)
+    if (!seatObj?.isBot) return
+    const ms = botThinkDelayMs(entry.seed)
+    entry.botTimer = setTimeout(() => runBotTurn(code), ms)
+    const h = entry.botTimer as unknown as { unref?: () => void }
+    if (typeof h.unref === 'function') h.unref()
+  }
+
+  function afterTurn(code: string): void {
+    const entry = entries.get(code)
+    if (!entry) return
+    const state = entry.game.getState()
+    if (state.status === 'ENDED') {
+      entry.timer.disarm()
+      disarmBot(code)
+      return
+    }
+    const room = registry.get(code)
+    const turnSeat = room?.seats.find((s) => s.seat === state.turn)
+    if (turnSeat?.isBot) {
+      entry.timer.disarm()
+      maybeScheduleBot(code)
+    } else {
+      disarmBot(code)
+      armClock(code)
+    }
+  }
+
+  function runBotTurn(code: string): void {
+    const entry = entries.get(code)
+    const room = registry.get(code)
+    if (!entry || !room) return
+    entry.botTimer = null
+    const state = entry.game.getState()
+    if (state.status !== 'PLAYING') {
+      entry.timer.disarm()
+      return
+    }
+    const turn = state.turn
+    const seatObj = room.seats.find((s) => s.seat === turn)
+    if (!seatObj?.isBot) {
+      armClock(code)
+      return
+    }
+    const snap = entry.game.getState()
+    const board = snap.board
+    const rack = snap.racks[turn]
+    let move: ReturnType<typeof generateBotMove>
+    try {
+      move = generateBotMove(board, rack, isWord, { seed: entry.seed })
+    } catch {
+      move = { pass: true }
+    }
+    if ('pass' in move) {
+      const pres = entry.game.pass(turn)
+      if (!pres.ok) {
+        afterTurn(code)
+        return
+      }
+      const after = entry.game.getState()
+      const over = after.status === 'ENDED'
+      if (over) {
+        entry.timer.disarm()
+        disarmBot(code)
+      }
+      broadcastState(code, {})
+      if (!over) afterTurn(code)
+      return
+    }
+    const specs: PlaceSpec[] = move.placements.map((p) => {
+      const square = { row: p.row, col: p.col }
+      if (p.tile.isBlank) {
+        const asLetter = (p.tile.blankAs ?? '').trim().toUpperCase()
+        return { square, face: '?', as: /^[A-Z]$/.test(asLetter) ? asLetter : 'A' }
+      }
+      return { square, face: p.tile.face }
+    })
+    const placed = entry.game.place(turn, specs)
+    if (!placed.ok) {
+      const pres = entry.game.pass(turn)
+      void pres
+      const after = entry.game.getState()
+      const over = after.status === 'ENDED'
+      if (over) {
+        entry.timer.disarm()
+        disarmBot(code)
+      }
+      broadcastState(code, {})
+      if (!over) afterTurn(code)
+      return
+    }
+    const after = entry.game.getState()
+    const over = after.status === 'ENDED'
+    if (over) {
+      entry.timer.disarm()
+      disarmBot(code)
+    }
+    broadcastState(code, { bot_move: true })
+    if (!over) afterTurn(code)
+  }
+
   function autoPass(code: string): void {
     const entry = entries.get(code)
     if (!entry) return
@@ -301,9 +428,10 @@ export function createBinding(registry: RoomRegistry, opts: CreateBindingOpts) {
       over,
     })
     if (!over) {
-      armClock(code)
+      afterTurn(code)
     } else {
       entry.timer.disarm()
+      disarmBot(code)
     }
   }
 
@@ -312,6 +440,7 @@ export function createBinding(registry: RoomRegistry, opts: CreateBindingOpts) {
     const entry = entries.get(code)
     const room = registry.get(code)
     if (!entry || !room) return
+    const seats_info = seatsInfoFor(code)
     for (const s of room.seats) {
       const view = viewFor(entry, s.seat)
       const frame: RoomReply = {
@@ -320,6 +449,7 @@ export function createBinding(registry: RoomRegistry, opts: CreateBindingOpts) {
         code,
         seats: room.seats.length,
         ...view,
+        seats_info,
         ...extra,
       }
       try {
@@ -343,15 +473,20 @@ export function createBinding(registry: RoomRegistry, opts: CreateBindingOpts) {
       typeof seed === 'number' && Number.isFinite(seed) ? Math.floor(seed) : Math.floor(Math.random() * 2 ** 31)
     const game = new LocalGame(names, useSeed, isWord)
     const old = entries.get(code)
-    if (old) old.timer.disarm()
+    if (old) {
+      old.timer.disarm()
+      if (old.botTimer !== null) clearTimeout(old.botTimer)
+    }
     const entry: RoomEntry = {
       game,
       timerOn: clock?.timerOn ?? true,
       turnSecs: clock?.turnSecs ?? DEFAULT_TURN_SECS,
       timer: new TurnTimer(),
+      seed: useSeed,
+      botTimer: null,
     }
     entries.set(code, entry)
-    armClock(code)
+    afterTurn(code)
     return { ok: true, entry }
   }
 
@@ -463,6 +598,7 @@ export function createBinding(registry: RoomRegistry, opts: CreateBindingOpts) {
       const token = normalizeToken(getField(obj, 'token', 'session', 'session_token'))
       const res = registry.rejoin(code, token)
       if (!res.ok) return errReply('rejoin', res.error)
+      const seats_info = seatsInfoFor(res.room.code)
       const entry = entries.get(res.room.code)
       if (!entry) {
         return okReply('rejoin', {
@@ -471,6 +607,7 @@ export function createBinding(registry: RoomRegistry, opts: CreateBindingOpts) {
           seat: res.seat.seat,
           you: res.seat.seat,
           seats: res.room.seats.length,
+          seats_info,
           started: false,
           turn: 0,
           scores: res.room.seats.map(() => 0),
@@ -485,6 +622,7 @@ export function createBinding(registry: RoomRegistry, opts: CreateBindingOpts) {
         code: res.room.code,
         token: res.seat.token,
         seats: res.room.seats.length,
+        seats_info,
         ...view,
       })
     }
@@ -558,18 +696,117 @@ export function createBinding(registry: RoomRegistry, opts: CreateBindingOpts) {
       const started = startGame(roomCode, seed, clock)
       if (!started.ok) return errReply(m, started.error)
       const state = started.entry.game.getState()
+      const seats_info = seatsInfoFor(roomCode)
       const reply = okReply(m, {
         code: roomCode,
         started: true,
         turn: state.turn,
         scores: [...state.scores],
         seats: auth.room.seats.length,
+        seats_info,
         over: false,
         bag_remaining: state.bagRemaining,
         seat,
+
         you: seat,
       })
       broadcastState(roomCode, { started: true })
+      return reply
+    }
+
+    if (m === 'add_bot') {
+      if (seat !== 0) return errReply(m, 'NOT_HOST')
+      const res = registry.addBot(roomCode)
+      if (!res.ok) return errReply(m, res.error)
+      const botSeat = res.seat.seat
+      const seats_info = seatsInfoFor(roomCode)
+      const reply = okReply(m, {
+        bot: BOT_NAME,
+        bot_seat: botSeat,
+        seat: BOT_NAME,
+        name: BOT_NAME,
+        is_bot: true,
+        bot_seated: true,
+        seats: res.room.seats.length,
+        seats_info,
+        code: roomCode,
+      })
+      const live = entries.get(roomCode)
+      if (live) {
+        broadcastState(roomCode, {
+          bot: BOT_NAME,
+          bot_seat: botSeat,
+          seat: BOT_NAME,
+          name: BOT_NAME,
+          is_bot: true,
+          bot_seated: true,
+          seats_info,
+        })
+      } else if (send) {
+        for (const s of res.room.seats) {
+          const frame: RoomReply = {
+            m: 'state_sync',
+            ok: true,
+            code: roomCode,
+            seats: res.room.seats.length,
+            seats_info,
+            bot: BOT_NAME,
+            bot_seat: botSeat,
+            seat: BOT_NAME,
+            name: BOT_NAME,
+            is_bot: true,
+            bot_seated: true,
+            started: false,
+          }
+          try {
+            send(s.seat, frame)
+          } catch {
+            // a failing recipient never blocks the rest of the fan-out
+          }
+        }
+      }
+      return reply
+    }
+
+    if (m === 'remove_bot') {
+      if (seat !== 0) return errReply(m, 'NOT_HOST')
+      const seatRaw = getField(obj, 'seat', 'target', 'seat_index', 'which', 'bot_seat')
+      const res = registry.removeBot(roomCode, seatRaw)
+      if (!res.ok) return errReply(m, res.error)
+      disarmBot(roomCode)
+      const seats_info = seatsInfoFor(roomCode)
+      const reply = okReply(m, {
+        seats: res.room.seats.length,
+        seats_info,
+        code: roomCode,
+      })
+      const live = entries.get(roomCode)
+      if (live) {
+        if (live.game.getState().status !== 'PLAYING') {
+          live.timer.disarm()
+          disarmBot(roomCode)
+        }
+        broadcastState(roomCode, { seats_info })
+      } else if (send) {
+        for (const s of res.room.seats) {
+          const frame: RoomReply = {
+            m: 'state_sync',
+            ok: true,
+            code: roomCode,
+            seats: res.room.seats.length,
+            seats_info,
+            started: false,
+          }
+          try {
+            send(s.seat, frame)
+          } catch {
+            // a failing recipient never blocks the rest of the fan-out
+          }
+        }
+        if (res.room.seats.length === 0) {
+          // no recipients left; nothing to fan out
+        }
+      }
       return reply
     }
 
@@ -589,8 +826,10 @@ export function createBinding(registry: RoomRegistry, opts: CreateBindingOpts) {
       }
       const ok = result as { ok: true; points: number; words: string[]; bingo: boolean; turn: number; scores: number[] }
       const over = entry.game.getState().status === 'ENDED'
-      if (over) entry.timer.disarm()
-      else armClock(roomCode)
+      if (over) {
+        entry.timer.disarm()
+        disarmBot(roomCode)
+      } else afterTurn(roomCode)
       const reply = okReply(m, {
         accepted: true,
         points: ok.points,
@@ -614,8 +853,10 @@ export function createBinding(registry: RoomRegistry, opts: CreateBindingOpts) {
       }
       const ok = result as { ok: true; turn: number; scores: number[] }
       const over = entry.game.getState().status === 'ENDED'
-      if (over) entry.timer.disarm()
-      else armClock(roomCode)
+      if (over) {
+        entry.timer.disarm()
+        disarmBot(roomCode)
+      } else afterTurn(roomCode)
       const reply = okReply(m, {
         accepted: true,
         turn: ok.turn,
@@ -661,8 +902,10 @@ export function createBinding(registry: RoomRegistry, opts: CreateBindingOpts) {
       }
       const ok = result as { ok: true; turn: number; scores: number[]; rack: Tile[] }
       const over = entry.game.getState().status === 'ENDED'
-      if (over) entry.timer.disarm()
-      else armClock(roomCode)
+      if (over) {
+        entry.timer.disarm()
+        disarmBot(roomCode)
+      } else afterTurn(roomCode)
       const reply = okReply(m, {
         accepted: true,
         turn: ok.turn,
@@ -787,6 +1030,10 @@ export function createBinding(registry: RoomRegistry, opts: CreateBindingOpts) {
     broadcastState,
     startGame,
     resolveClock,
+    disarmBot,
+    maybeScheduleBot,
+    runBotTurn,
+    afterTurn,
   }
 }
 

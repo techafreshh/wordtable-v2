@@ -12,11 +12,13 @@ import {
   type LocalSnapshot,
 } from '../../../shared/engine/local'
 import { GameStatus } from '../../../shared/engine/game'
-import { isSessionWord as isWord } from './lexicon'
+import { generateBotMove } from '../../../shared/engine/bot'
+import { isLegalWord } from './lexicon'
 
-// Bot seats never think: once the turn reaches a bot seat it passes after
-// BOT_PASS_MS (cancellable on rematch/session replacement), so a
-// pass-only acceptance path never stalls waiting on a bot.
+// Bot seats think with the same greedy generator as the server: once the
+// turn reaches a bot seat it commits the generator move (or passes when the
+// generator passes) after BOT_PASS_MS, cancellable on rematch/session
+// replacement so the table never stalls waiting on a bot.
 export const BOT_PASS_MS = 700
 export const MIN_SEATS = 2
 export const MAX_SEATS = 4
@@ -35,9 +37,9 @@ export interface WordHistoryEntry {
   points: number
 }
 
-// Lexicon (issue #45, see ./lexicon): the full SOWPODS list is fetched
-// as a static asset after boot; until it arrives pass-only paths never
-// consult the lexicon, so refuse everything instead of guessing.
+// Lexicon (issue #45, see ./lexicon): the full SOWPODS list ships as a
+// static asset after boot; the generator and validation share isLegalWord
+// (fallback until the fetch resolves) so offline bots place immediately.
 
 function cleanName(raw: string, fallback: string): string {
   const name = String(raw ?? '')
@@ -59,6 +61,7 @@ interface SessionState {
 
 let game: LocalGame | null = null
 let botTimer: ReturnType<typeof setTimeout> | null = null
+let sessionSeed = 1
 
 function disarmBotTimer(): void {
   if (botTimer !== null) {
@@ -67,16 +70,50 @@ function disarmBotTimer(): void {
   }
 }
 
+function runOfflineBotMove(): void {
+  botTimer = null
+  if (game === null) return
+  const snap = game.getState()
+  if (snap.status !== GameStatus.PLAYING) return
+  const flags = sessionStore.getState().isBot
+  if (!flags[snap.turn]) return
+  const turn = snap.turn
+  try {
+    const move = generateBotMove(snap.board, snap.racks[turn], isLegalWord, {
+      seed: sessionSeed,
+    })
+    if ('pass' in move) {
+      game.pass(turn)
+    } else {
+      const specs = move.placements.map((p) => {
+        const square = { row: p.row, col: p.col }
+        if (p.tile.isBlank) {
+          const asLetter = (p.tile.blankAs ?? '').trim().toUpperCase()
+          return { square, face: '?', as: /^[A-Z]$/.test(asLetter) ? asLetter : 'A' }
+        }
+        return { square, face: p.tile.face }
+      })
+      const res = game.place(turn, specs)
+      if (!res.ok) game.pass(turn)
+    }
+  } catch {
+    try {
+      game.pass(turn)
+    } catch {
+      // no session to advance; ignore
+    }
+  }
+  sessionStore.setState((s) => ({ version: s.version + 1 }))
+  armBotTimer()
+}
+
 function armBotTimer(): void {
   disarmBotTimer()
   const state = sessionStore.getState()
   const snap = state.snapshot()
   if (snap === null || snap.status !== GameStatus.PLAYING) return
   if (!state.isBot[snap.turn]) return
-  botTimer = setTimeout(() => {
-    botTimer = null
-    sessionStore.getState().passTurn()
-  }, BOT_PASS_MS)
+  botTimer = setTimeout(runOfflineBotMove, BOT_PASS_MS)
 }
 
 export const sessionStore = createStore<SessionState>()((set, get) => ({
@@ -88,6 +125,7 @@ export const sessionStore = createStore<SessionState>()((set, get) => ({
   // human even if the caller flags it as a bot.
   startSession: (names, bots, seed = 1) => {
     disarmBotTimer()
+    sessionSeed = seed
     const count = Math.min(MAX_SEATS, Math.max(MIN_SEATS, names.length))
     const clean = Array.from({ length: count }, (_, i) =>
       cleanName(
@@ -98,7 +136,7 @@ export const sessionStore = createStore<SessionState>()((set, get) => ({
     const flags = Array.from({ length: count }, (_, i) =>
       i === 0 ? false : Boolean(bots[i]),
     )
-    game = new LocalGame(clean, seed, isWord)
+    game = new LocalGame(clean, seed, isLegalWord)
     set({ names: clean, isBot: flags, version: get().version + 1 })
     armBotTimer()
   },

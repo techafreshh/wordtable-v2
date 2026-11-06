@@ -195,3 +195,16 @@ body {
   #rack .tile { width: 44px; height: 56px; font-size: 1.2rem; }
   #rack-actions button { padding: 0.5rem 1rem; }
 }
+
+/* Three.js table backdrop (issue #11): ambient canvas behind the board.
+ * The #backdrop gradient above stays the fallback paint when the 3D
+ * backdrop fails; the canvas never intercepts play. */
+canvas#table-gl {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}
+#backdrop canvas { pointer-events: none; }

@@ -1,13 +1,18 @@
+/* Mirrors client/styles/board.css — bundled import path for Vite. */
+
 * { box-sizing: border-box; }
 
 html, body {
   margin: 0;
   padding: 0;
-  background: var(--wood-dark);
   color: var(--ivory);
   font-family: var(--font-stack);
   height: 100%;
   overflow: hidden;
+}
+
+body {
+  background: linear-gradient(160deg, var(--wood-dark) 0%, var(--wood) 45%, var(--felt) 130%);
 }
 
 #app { position: relative; z-index: 1; }
@@ -21,28 +26,109 @@ html, body {
   pointer-events: none;
 }
 
+.table {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0.5rem 1rem;
+}
+
+.table-title {
+  margin: 0;
+  color: var(--ivory);
+  font-size: 1.25rem;
+  letter-spacing: 0.04em;
+}
+
+.table-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+}
+
+.table-actions button {
+  border: none;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  padding: 0.6rem 1.4rem;
+  font-family: var(--font-stack);
+}
+
+.table-actions button[data-action="create"],
+.table-actions button[data-action="join"] {
+  background: var(--brass);
+  color: var(--wood-dark);
+}
+
+.table-actions button[data-action="play"] {
+  background: var(--felt-bright);
+  color: var(--ivory);
+}
+
 .board {
   display: grid;
   grid-template-columns: repeat(15, 1fr);
   gap: 2px;
-  perspective: 1200px;
+  width: min(94vw, calc(100vh - 220px), 600px);
+  aspect-ratio: 1 / 1;
+  padding: 6px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(150deg, var(--wood) 0%, var(--wood-dark) 100%);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(232, 201, 122, 0.25);
 }
-.board-cell {
-  aspect-ratio: 1;
-  background: var(--felt);
-  border-radius: var(--radius-sm);
+
+.sq {
+  aspect-ratio: 1 / 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  font-size: clamp(7px, 1.7vw, 11px);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  user-select: none;
 }
-.board-cell.tws, .board-cell.dws { background: #8a3b3b; }
-.board-cell.dls { background: #2b6a8a; }
-.board-cell.tls { background: #6a2b8a; }
-.board-cell.star { background: var(--brass); }
+
+.sq-tw { background: #93392b; color: #fbeed9; }
+.sq-dw { background: #c07a4a; color: #3d2416; }
+.sq-tl { background: #2f6f8f; color: #eaf6fb; }
+.sq-dl { background: #7fa8b8; color: #17303c; }
+.sq-plain { background: var(--felt); color: var(--ivory-dim); }
+.sq-star {
+  background: linear-gradient(160deg, var(--brass-hot) 0%, var(--brass) 60%, #9a7838 100%);
+  color: #3d2b12;
+}
+
+.sq .star {
+  color: #3d2b12;
+  font-size: clamp(10px, 2.6vw, 18px);
+  line-height: 1;
+  text-shadow: 0 1px 0 rgba(255, 248, 231, 0.6);
+}
+
+.sq-label { line-height: 1; pointer-events: none; }
 
 .tile {
   display: grid;
   place-items: center;
-  background: linear-gradient(180deg, #fff8e7, var(--ivory));
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(180deg, #fff8e7 0%, var(--ivory) 60%, var(--ivory-dim) 100%);
   color: #3d2b12;
+  border: 1px solid rgba(61, 43, 18, 0.4);
   border-radius: var(--radius-sm);
-  box-shadow: 0 2px 6px rgba(0,0,0,.4);
-  transform: translateZ(4px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -2px 3px rgba(61, 43, 18, 0.25),
+    0 2px 6px rgba(0, 0, 0, 0.4);
+  font-weight: 700;
+}
+
+@media (max-width: 480px) {
+  .table { padding: 0.5rem 0.25rem 0.75rem; }
+  .table-title { font-size: 1.05rem; }
+  .table-actions button { padding: 0.5rem 1rem; }
 }

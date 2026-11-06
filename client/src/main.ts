@@ -2,11 +2,20 @@
 // session store: Start → Setup → Lobby → Table → Recap. The session wraps
 // LocalGame, so turns, six-pass endings and rematch come from the engine;
 // this module only guards routes and paints the matching screen module.
-// A persistent #toast host sits outside the routed #screen so the offline
-// toast survives route repaints.
+//
+// Coexistence with the placement Table (issues #7-9): the legacy
+// rack/pending/commit loop stays mounted on the `start` route alongside
+// the StartScreen (same #screen container, StartScreen first so its
+// `data-action="play"` wins global queries and the Table's scoped
+// `.table-actions` delegation still commits). `?rack/?seats/?turn` boot,
+// `fx.css`, and the game/ui store subscriptions are kept so a bare `/`
+// load still shows the rack, provisional chip, Recall/Shuffle, chat and
+// sounds. Hot-seat routes (#/setup, #/lobby, #/table, #/recap) render only
+// their screen module, keeping `.seat` counts exact for the loop probes.
 
 import './styles/tokens.css'
 import './styles/board.css'
+import './styles/fx.css'
 import './styles/hud.css'
 import './styles/screens.css'
 import { GameStatus } from '../../shared/engine/game'
@@ -22,9 +31,55 @@ import { buildLobbyHTML, mountLobby } from './components/Lobby'
 import { buildHotSeatTableHTML, mountHotSeatTable } from './components/HotSeatTable'
 import { buildRecapHTML, mountRecap } from './components/Recap'
 import { buildToastHTML, mountToast } from './components/Toast'
-import { gameStore } from './store/game'
-import { uiStore } from './store/ui'
+import { mountTable, renderTable, tableSkeletonHTML } from './components/Table'
+import { gameStore, provScoreText } from './store/game'
+import { DEFAULT_SEAT_NAMES, uiStore } from './store/ui'
 import { sessionStore } from './store/session'
+import { TileBag } from '../../shared/engine/bag'
+
+// Offline table boot (issues #7/#8): the rack plus placement loop lives
+// in the client. `?rack=HELLO??` seeds the rack (1-7 chars of A-Z/?,
+// case-insensitive) for deterministic probes, otherwise seven tiles come
+// from TileBag(1).
+function readSeededFaces(): string[] | null {
+  try {
+    const raw = new URLSearchParams(window.location.search).get('rack')
+    if (!raw) return null
+    const faces = [...raw.toUpperCase()]
+      .filter((ch) => ch === '?' || (ch >= 'A' && ch <= 'Z'))
+      .slice(0, 7)
+    return faces.length > 0 ? faces : null
+  } catch {
+    return null
+  }
+}
+
+function dealFaces(): string[] {
+  return new TileBag(1).draw(7).map((t) => (t.isBlank ? '?' : t.face))
+}
+
+// HUD boot (issue #9): `?seats=N` (clamped 2-4) selects the lineup,
+// `?turn=K` the starting seat. Invalid values keep the store defaults.
+function bootHudFromURL(): void {
+  try {
+    const params = new URLSearchParams(window.location.search)
+    const rawSeats = params.get('seats')
+    if (rawSeats !== null) {
+      const n = Number(rawSeats)
+      if (Number.isInteger(n)) {
+        const count = Math.min(4, Math.max(2, n))
+        uiStore.getState().setSeats(DEFAULT_SEAT_NAMES.slice(0, count))
+      }
+    }
+    const rawTurn = params.get('turn')
+    if (rawTurn !== null) {
+      const t = Number(rawTurn)
+      if (Number.isInteger(t)) uiStore.getState().setTurn(t)
+    }
+  } catch {
+    // URL unavailable (tests): keep the store defaults.
+  }
+}
 
 // Seat-picker draft: survives lobby-edit round trips so names are kept
 // when the user goes back to tweak seats. Refreshed on every start.
@@ -52,8 +107,21 @@ function currentRoute(): Route {
   return parseRoute(window.location.hash)
 }
 
-// Route guards: #/table needs a live session, #/recap needs an ended one.
-// Anything unguarded falls back one step (recap → table → setup).
+// Legacy region repaint: only the `start` route hosts the Table, so
+// game/ui intents on hot-seat routes must not touch HotSeatTable's
+// `.board-host` (renderTable would overwrite committed tiles with the
+// placement board). Guarded by route, not by node presence.
+function repaintLegacyTable(): void {
+  if (currentRoute() !== 'start') return
+  const host = screenHost()
+  if (!host || !host.querySelector('.table')) return
+  renderTable(host)
+}
+
+// Route guards: #/table needs a live session, #/lobby needs one too
+// (a deep link with no session bounces to setup instead of painting an
+// empty lobby), #/recap needs an ended one. Anything unguarded falls
+// back one step (recap → table → setup).
 function render(): void {
   const host = screenHost()
   if (!host) return
@@ -61,6 +129,7 @@ function render(): void {
   const snap = sessionStore.getState().snapshot()
   let route = raw
   if (route === 'table' && snap === null) route = 'setup'
+  else if (route === 'lobby' && snap === null) route = 'setup'
   else if (
     route === 'recap' &&
     (snap === null || snap.status !== GameStatus.ENDED)
@@ -75,17 +144,25 @@ function render(): void {
   uiStore.getState().setScreen(route)
   switch (route) {
     case 'start': {
-      host.innerHTML = buildStartScreenHTML(readNickname())
+      // StartScreen above the legacy Table: offline Create/Join toasts
+      // surface through the Table's own #toast node.
+      host.innerHTML =
+        buildStartScreenHTML(readNickname()) + tableSkeletonHTML()
       mountStartScreen(host, () => navigate('setup'))
+      mountTable(host)
+      renderTable(host)
       break
     }
     case 'setup': {
       if (setupDraft.names.length === 0) setupDraft.names = [readNickname()]
-      host.innerHTML = buildSetupHTML(
-        setupDraft.count,
-        setupDraft.names,
-        setupDraft.bots,
-      )
+      host.innerHTML =
+        buildSetupHTML(
+          setupDraft.count,
+          setupDraft.names,
+          setupDraft.bots,
+        ) + buildToastHTML(uiStore.getState().toast)
+      const toast = host.querySelector<HTMLElement>('#toast')
+      if (toast) mountToast(toast)
       mountSetup(host, (choice) => {
         sessionStore.getState().startSession(choice.names, choice.bots)
         setupDraft = {
@@ -99,7 +176,16 @@ function render(): void {
     }
     case 'lobby': {
       const state = sessionStore.getState()
-      host.innerHTML = buildLobbyHTML(state.names, state.isBot)
+      if (state.names.length === 0) {
+        navigate('setup')
+        paintedHash = window.location.hash
+        return
+      }
+      host.innerHTML =
+        buildLobbyHTML(state.names, state.isBot) +
+        buildToastHTML(uiStore.getState().toast)
+      const toast = host.querySelector<HTMLElement>('#toast')
+      if (toast) mountToast(toast)
       mountLobby(host)
       break
     }
@@ -117,7 +203,11 @@ function render(): void {
         paintedHash = window.location.hash
         return
       }
-      host.innerHTML = buildHotSeatTableHTML(tableSnap)
+      host.innerHTML =
+        buildHotSeatTableHTML(tableSnap) +
+        buildToastHTML(uiStore.getState().toast)
+      const toast = host.querySelector<HTMLElement>('#toast')
+      if (toast) mountToast(toast)
       mountHotSeatTable(host)
       break
     }
@@ -128,10 +218,11 @@ function render(): void {
         paintedHash = window.location.hash
         return
       }
-      host.innerHTML = buildRecapHTML(
-        ended,
-        sessionStore.getState().wordHistory(),
-      )
+      host.innerHTML =
+        buildRecapHTML(ended, sessionStore.getState().wordHistory()) +
+        buildToastHTML(uiStore.getState().toast)
+      const toast = host.querySelector<HTMLElement>('#toast')
+      if (toast) mountToast(toast)
       mountRecap(host)
       break
     }
@@ -140,8 +231,8 @@ function render(): void {
 }
 
 // Test/black-box hook: the legacy placement-table fields (issues #7-9)
-// keep working against their stores, and the session fields force the
-// offline loop (six passes, rematch, snapshot) without touching the DOM.
+// drive their stores, and the session fields force the offline loop
+// (six passes, rematch, snapshot) without touching the DOM.
 declare global {
   interface Window {
     __wordtable?: {
@@ -188,7 +279,7 @@ function installHook(): void {
     setSeats: (n: number) => {
       if (!Number.isInteger(n)) return
       const count = Math.min(4, Math.max(2, n))
-      uiStore.getState().setSeats(['You', 'Rival 1', 'Rival 2', 'Rival 3'].slice(0, count))
+      uiStore.getState().setSeats(DEFAULT_SEAT_NAMES.slice(0, count))
     },
     setTurn: (i: number) => {
       uiStore.getState().setTurn(i)
@@ -209,7 +300,7 @@ function installHook(): void {
         pendingCount: state.pending.length,
         provScore: state.provScore,
         provWords: [...state.provWords],
-        provText: `${state.provScore} pts`,
+        provText: provScoreText(state.provScore),
         selectedRack: state.selectedRack,
         lastMove: [...state.lastMove],
         lastScore: state.lastScore,
@@ -228,6 +319,7 @@ function installHook(): void {
       uiStore.getState().resetTable()
       uiStore.getState().clearToast()
       uiStore.getState().closeBlankPicker()
+      bootHudFromURL()
     },
     pass: () => {
       sessionStore.getState().passTurn()
@@ -246,10 +338,11 @@ function installHook(): void {
 function boot(): void {
   const app = document.getElementById('app')
   if (!app) return
-  app.innerHTML = '<div id="screen"></div>' + buildToastHTML(null)
-  const toast = app.querySelector<HTMLElement>('#toast')
-  if (toast) mountToast(toast)
+  bootHudFromURL()
+  app.innerHTML = '<div id="screen"></div>'
   startRouter(() => handleRoute())
+  gameStore.subscribe(repaintLegacyTable)
+  uiStore.subscribe(repaintLegacyTable)
   // Session intents (button passes, bot auto-pass, hook forcing) repaint
   // the table/recap/lobby. Start/setup keep their inputs: no session
   // intent can fire while they are showing (seat 0 is always human).
@@ -260,6 +353,7 @@ function boot(): void {
   })
   installHook()
   render()
+  gameStore.getState().setRack(readSeededFaces() ?? dealFaces())
 }
 
 boot()

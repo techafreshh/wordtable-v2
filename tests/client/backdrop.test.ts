@@ -9,7 +9,7 @@ import {
   lerpStep,
   createParallax,
 } from '../../client/src/three/parallax'
-import { isBackdropDisabled } from '../../client/src/three/table'
+import { isBackdropDisabled } from '../../client/src/three/backdrop-guard'
 
 const CLIENT_STYLES = new URL('../../client/styles/', import.meta.url)
 const SRC_STYLES = new URL('../../client/src/styles/', import.meta.url)
@@ -197,5 +197,32 @@ describe('backdrop sources', () => {
     expect(main).toContain('initTableBackdrop')
     expect(main).toContain("getElementById('backdrop')")
     expect(main.lastIndexOf('initTableBackdrop')).toBeGreaterThan(main.indexOf('render()'))
+  })
+
+  it('lazy-loads the Three backdrop behind the static guard', () => {
+    const main = src('main.ts')
+    // Dynamic import: Vite emits Three as a separate async chunk.
+    expect(main).toContain("import('./three/table')")
+    expect(main).toContain('isBackdropDisabled')
+    // No static import of the Three module: the entry chunk stays light.
+    expect(main).not.toContain("from './three/table'")
+    expect(main).not.toContain('from "./three/table"')
+    // ?nogl=1 early-returns before the dynamic import is reached.
+    expect(main.indexOf('isBackdropDisabled')).toBeLessThan(
+      main.indexOf("import('./three/table')"),
+    )
+  })
+
+  it('keeps the guard module free of Three imports', () => {
+    const guard = src('three/backdrop-guard.ts')
+    expect(guard).toContain('isBackdropDisabled')
+    expect(guard).not.toContain("from 'three'")
+    expect(guard).not.toContain('from "three"')
+  })
+
+  it('re-exports the guard from the Three module', () => {
+    const table = src('three/table.ts')
+    expect(table).toContain('backdrop-guard')
+    expect(table).toContain('isBackdropDisabled')
   })
 })

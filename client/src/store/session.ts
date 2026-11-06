@@ -12,8 +12,7 @@ import {
   type LocalSnapshot,
 } from '../../../shared/engine/local'
 import { GameStatus } from '../../../shared/engine/game'
-import { Dictionary } from '../../../shared/engine/dictionary'
-import sowpodsRaw from '../../../dictionaries/sowpods.txt?raw'
+import { isSessionWord as isWord } from './lexicon'
 
 // Bot seats never think: once the turn reaches a bot seat it passes after
 // BOT_PASS_MS (cancellable on rematch/session replacement), so a
@@ -36,21 +35,9 @@ export interface WordHistoryEntry {
   points: number
 }
 
-function buildLexicon(): (word: string) => boolean {
-  try {
-    const raw = typeof sowpodsRaw === 'string' ? sowpodsRaw : ''
-    if (raw.trim() !== '') {
-      const dict = Dictionary.fromText(raw)
-      if (dict.size > 1000) return (word: string) => dict.isWord(word)
-    }
-  } catch {
-    // Bundled list unavailable (minimal builds): pass-only paths never
-    // consult the lexicon, so refuse everything instead of guessing.
-  }
-  return () => false
-}
-
-const isWord = buildLexicon()
+// Lexicon (issue #45, see ./lexicon): the full SOWPODS list is fetched
+// as a static asset after boot; until it arrives pass-only paths never
+// consult the lexicon, so refuse everything instead of guessing.
 
 function cleanName(raw: string, fallback: string): string {
   const name = String(raw ?? '')

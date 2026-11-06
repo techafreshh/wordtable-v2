@@ -14,9 +14,8 @@ import {
   type Placement,
   type RuleReason,
 } from '../../../shared/engine/rules'
-import { Dictionary } from '../../../shared/engine/dictionary'
 import { TileBag, type Tile } from '../../../shared/engine/bag'
-import sowpodsRaw from '../../../dictionaries/sowpods.txt?raw'
+import { isLegalWord } from './lexicon'
 
 export interface PendingTile {
   id: number
@@ -61,71 +60,10 @@ interface GameStoreState {
 let nextPendingId = 0
 let bag = new TileBag(1)
 
-// Client lexicon: the bundled SOWPODS text via a Vite ?raw import, so any
-// real word probes play is legal and XYZQ-style tokens stay illegal. The
-// embedded fallback only covers builds where the raw import comes back
-// empty; it deliberately excludes XYZQ-style tokens.
-const FALLBACK_WORDS: readonly string[] = [
-  'HELLO',
-  'WORLD',
-  'WORD',
-  'TABLE',
-  'GAME',
-  'PLAY',
-  'TILE',
-  'TILES',
-  'SCORE',
-  'RACK',
-  'BOARD',
-  'LETTER',
-  'LETTERS',
-  'BLANK',
-  'PICKER',
-  'TOAST',
-  'FLOAT',
-  'THUNK',
-  'SLAM',
-  'AT',
-  'IT',
-  'TO',
-  'OF',
-  'IN',
-  'IS',
-  'HE',
-  'HI',
-  'GO',
-  'DO',
-  'WE',
-  'AN',
-  'AS',
-  'CAT',
-  'DOG',
-  'BAT',
-  'RAT',
-  'HAT',
-  'CAR',
-  'BAR',
-]
-
-function buildLexicon(): (word: string) => boolean {
-  try {
-    const raw = typeof sowpodsRaw === 'string' ? sowpodsRaw : ''
-    if (raw.trim() !== '') {
-      const dict = Dictionary.fromText(raw)
-      if (dict.size > 1000) return (word: string) => dict.isWord(word)
-    }
-  } catch {
-    // Fall through to the embedded list.
-  }
-  const dict = Dictionary.fromText(FALLBACK_WORDS.join('\n'))
-  return (word: string) => dict.isWord(word)
-}
-
-const isWord = buildLexicon()
-
-export function isLegalWord(word: string): boolean {
-  return isWord(word)
-}
+// full SOWPODS list is fetched as a static asset after boot instead of
+// inlined (see the ./lexicon import above). The embedded fallback only
+// covers early commits; it deliberately excludes XYZQ-style tokens.
+export { isLegalWord }
 
 function emptyGrid(): BoardGrid {
   return Array.from({ length: BOARD_SIZE }, () =>
@@ -348,7 +286,7 @@ export const gameStore = createStore<GameStoreState>()((set, get) => {
     commit: () => {
       const { rack, pending, board } = get()
       if (pending.length === 0) return { ok: false, reason: 'EMPTY_MOVE' }
-      const check = validateMove(board, toPlacements(pending), isWord)
+      const check = validateMove(board, toPlacements(pending), isLegalWord)
       if (!check.ok) {
         // An undesignated blank is a picker problem, not a refusal: keep
         // the pending tiles so the picker can resolve them in place.

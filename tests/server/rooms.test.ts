@@ -257,7 +257,7 @@ describe('envelope dispatcher', () => {
 
   it('stubs out-of-scope methods with BAD_STATE', () => {
     const registry = new RoomRegistry()
-    for (const m of ['add_bot', 'remove_bot', 'rematch']) {
+    for (const m of ['rematch']) {
       expect(handleRoomMessage({ v: 1, m, code: 'AAAA', token: 't' }, registry)).toMatchObject({
         ok: false,
         error: 'BAD_STATE',

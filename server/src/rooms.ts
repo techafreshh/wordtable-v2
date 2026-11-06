@@ -1,6 +1,9 @@
 // Room registry — pure room/seat/token ownership, no sockets or JSON here.
 // The ws dispatcher in ./ws.ts maps wire envelopes onto this class.
 import { randomBytes } from 'node:crypto'
+import { BOT_NAME } from './bot-seat.js'
+
+export { BOT_NAME };
 
 export const MAX_SEATS = 4
 export const CODE_LENGTH = 4
@@ -9,6 +12,7 @@ export interface Seat {
   seat: number
   name: string
   token: string
+  isBot?: boolean
 }
 
 export interface Room {
@@ -23,6 +27,14 @@ export type JoinResult =
 export type RejoinResult =
   | { ok: true; room: Room; seat: Seat }
   | { ok: false; error: 'NO_ROOM' | 'NO_TOKEN' | 'BAD_TOKEN' }
+
+export type AddBotResult =
+  | { ok: true; room: Room; seat: Seat }
+  | { ok: false; error: 'NO_ROOM' | 'ROOM_FULL' }
+
+export type RemoveBotResult =
+  | { ok: true; room: Room; removed: Seat }
+  | { ok: false; error: 'NO_ROOM' | 'BAD_STATE' }
 
 /** Trim + uppercase; empty/missing input yields ''. */
 export function normalizeCode(raw: unknown): string {
@@ -74,7 +86,7 @@ export class RoomRegistry {
   create(name?: unknown): { room: Room; seat: Seat } {
     let code = generateCode()
     while (this.rooms.has(code)) code = generateCode()
-    const seat: Seat = { seat: 0, name: normalizeName(name), token: generateToken() }
+    const seat: Seat = { seat: 0, name: normalizeName(name), token: generateToken(), isBot: false }
     const room: Room = { code, seats: [seat] }
     this.rooms.set(code, room)
     return { room, seat }
@@ -92,7 +104,7 @@ export class RoomRegistry {
       return { ok: false, error: 'BAD_TOKEN' }
     }
     if (room.seats.length >= MAX_SEATS) return { ok: false, error: 'ROOM_FULL' }
-    const seat: Seat = { seat: room.seats.length, name: normalizeName(nameRaw), token: generateToken() }
+    const seat: Seat = { seat: room.seats.length, name: normalizeName(nameRaw), token: generateToken(), isBot: false }
     room.seats.push(seat)
     return { ok: true, room, seat }
   }
@@ -107,5 +119,41 @@ export class RoomRegistry {
     const seat = room.seats.find((s) => s.token === token)
     if (!seat) return { ok: false, error: 'BAD_TOKEN' }
     return { ok: true, room, seat }
+  }
+
+  addBot(codeRaw: unknown): AddBotResult {
+    const code = normalizeCode(codeRaw)
+    if (code === '') return { ok: false, error: 'NO_ROOM' }
+    const room = this.rooms.get(code)
+    if (!room) return { ok: false, error: 'NO_ROOM' }
+    if (room.seats.length >= MAX_SEATS) return { ok: false, error: 'ROOM_FULL' }
+    const seat: Seat = { seat: room.seats.length, name: BOT_NAME, token: generateToken(), isBot: true }
+    room.seats.push(seat)
+    return { ok: true, room, seat }
+  }
+
+  removeBot(codeRaw: unknown, seatRaw?: unknown): RemoveBotResult {
+    const code = normalizeCode(codeRaw)
+    if (code === '') return { ok: false, error: 'NO_ROOM' }
+    const room = this.rooms.get(code)
+    if (!room) return { ok: false, error: 'NO_ROOM' }
+    const bots = room.seats.filter((s) => s.isBot)
+    if (bots.length === 0) return { ok: false, error: 'BAD_STATE' }
+    let target: Seat | undefined
+    if (seatRaw === undefined || seatRaw === null) {
+      target = bots[bots.length - 1]
+    } else if (typeof seatRaw === 'string' && seatRaw.trim() === '') {
+      target = bots[bots.length - 1]
+    } else {
+      const n = typeof seatRaw === 'number' ? seatRaw : Number(String(seatRaw).trim())
+      if (!Number.isInteger(n)) return { ok: false, error: 'BAD_STATE' }
+      target = room.seats.find((s) => s.seat === n && s.isBot)
+      if (!target) return { ok: false, error: 'BAD_STATE' }
+    }
+    const idx = room.seats.indexOf(target)
+    if (idx < 0) return { ok: false, error: 'BAD_STATE' }
+    const [removed] = room.seats.splice(idx, 1)
+    for (let i = 0; i < room.seats.length; i++) room.seats[i].seat = i
+    return { ok: true, room, removed }
   }
 }

@@ -276,6 +276,22 @@ describe('session store over LocalGame', () => {
     expect(sessionStore.getState().snapshot()?.turn).toBe(0)
   })
 
+  it('greedy bot commits a scoring placement instead of a bare pass', () => {
+    vi.useFakeTimers()
+    // Seed 3 gives the bot a WE hook with the fallback lexicon.
+    sessionStore.getState().startSession(['Ann', 'Bo'], [false, true], 3)
+    expect(sessionStore.getState().snapshot()?.turn).toBe(0)
+    sessionStore.getState().passTurn()
+    expect(sessionStore.getState().snapshot()?.turn).toBe(1)
+    vi.advanceTimersByTime(BOT_PASS_MS)
+    const snap = sessionStore.getState().snapshot()
+    expect(snap?.turn).toBe(0)
+    const boardHasTiles = snap?.board.flat().some((cell) => cell !== null) ?? false
+    const history = sessionStore.getState().wordHistory()
+    // Either a placement scored (board non-empty, history grew, or scores moved).
+    expect(boardHasTiles || history.length > 0 || (snap?.scores[1] ?? 0) > 0).toBe(true)
+  })
+
   it('rematch disarms a pending bot pass', () => {
     vi.useFakeTimers()
     sessionStore.getState().startSession(['Ann', 'Bo'], [false, true])

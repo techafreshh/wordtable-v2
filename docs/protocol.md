@@ -22,8 +22,8 @@ It is identical to `../docs/protocol.md` in the Godot prototype repo
 | `create_room` | `name` | `code`, `token`, `seat:0`, `seats:1` |
 | `join_room` | `code`, `name`, optional `token` | `code`, `token`, `seat`/`you`, `seats` |
 | `rejoin` (`resync`) | `code`+`token` | full snapshot (`started`, `turn`, `scores`, `rack`, `board_tiles`, `over`, …) |
-| `add_bot` | host `code`+`token` | `bot: Botgomery`, `bot_seat`, `seat: Botgomery`, `bot_seated: true`, `seats` |
-| `remove_bot` | host `code`+`token`, optional `seat` | `seats` |
+| `add_bot` | host `code`+`token` | `bot: Botgomery`, `bot_seat`, `seat: Botgomery`, `name: Botgomery`, `is_bot:true`, `bot_seated: true`, `seats`, `seats_info` |
+| `remove_bot` | host `code`+`token`, optional `seat` | `seats`, `seats_info` |
 | `start_game` | host `code`+`token` | `started:true`, `turn`, `scores` |
 | `rematch` | host `code`+`token` | `started:true`, `turn`, `scores` |
 | `place_tiles` (`place`) | turn seat `code`+`token`, `tiles` | `accepted:true`, `points`, `turn`, `scores`, `over` |
@@ -47,5 +47,14 @@ the value under both `text` and `emote` so `emote":"👏` holds on the wire.
 `NO_ROOM`, `ROOM_FULL`, `NOT_HOST`, `NO_TOKEN`, `BAD_TOKEN`, `BAD_STATE`,
 `NOT_YOUR_TURN`, `NEED_OPPONENT`, `BAD_JSON`, `BAD_VERSION`, `UNKNOWN_MESSAGE`,
 `NOT_IN_LEXICON`, `BAD_TILES`, `BAD_TEXT`, and pass-through facade reasons.
+
+## Bots
+
+Host `add_bot` seats `Botgomery` with `is_bot:true`; every `state_sync`
+carries `seats_info:[{seat,name,is_bot}]` and `rejoin`/`start_game` replies
+echo it. When a bot turn arrives the server waits
+`5 + abs(seed) % 11` seconds (`bot_move` commits) then greedily commits via
+`generateBotMove(board, rack, isWord, { seed })` with `bot_move:true` or
+passes; `remove_bot` frees the seat and cancels a pending think.
 
 See the prototype's `docs/protocol.md` for the full field-level transcript.

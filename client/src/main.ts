@@ -1,23 +1,16 @@
 import './styles/tokens.css'
 import './styles/board.css'
 import './styles/fx.css'
-import { buildBoardHTMLWithPending, mountBoardInteractions } from './components/Board'
-import {
-  buildRackActionsHTML,
-  buildRackTilesHTML,
-  mountRack,
-  mountRackActions,
-} from './components/Rack'
+import { mountTable, renderTable } from './components/Table'
 import { gameStore, provScoreText } from './store/game'
 import { uiStore } from './store/ui'
 import { TileBag } from '../../shared/engine/bag'
 
-// Offline table boot (issue #7): the rack plus placement loop lives entirely
-// in the client. Board, rack, provisional chip and Recall/Shuffle render on
-// load so an offline game is always playable; Play re-renders the same
-// table idempotically. `?rack=HELLO??` seeds the rack (1-7 chars of A-Z/?,
-// case-insensitive) for deterministic probes, otherwise seven tiles come
-// from TileBag(1).
+// Offline table boot (issues #7/#8): the rack plus placement loop lives
+// entirely in the client. Board, rack, provisional chip, Recall/Shuffle and
+// Play commit/reject render on load so an offline game is always playable.
+// `?rack=HELLO??` seeds the rack (1-7 chars of A-Z/?, case-insensitive) for
+// deterministic probes, otherwise seven tiles come from TileBag(1).
 
 function readSeededFaces(): string[] | null {
   try {
@@ -39,48 +32,13 @@ function dealFaces(): string[] {
 function renderAll(): void {
   const app = document.getElementById('app')
   if (!app) return
-  const state = gameStore.getState()
-  const host = app.querySelector<HTMLElement>('.board-host')
-  if (host) host.innerHTML = buildBoardHTMLWithPending({}, state.pending)
-  const score = app.querySelector<HTMLElement>('#prov-score')
-  if (score) {
-    score.textContent = provScoreText(state.provScore)
-    score.title = state.provWords.join(' ')
-  }
-  const rack = app.querySelector<HTMLElement>('#rack')
-  if (rack) rack.innerHTML = buildRackTilesHTML(state.rack, state.selectedRack)
+  renderTable(app)
 }
 
 function bootTable(): void {
   const app = document.getElementById('app')
   if (!app) return
-  if (!app.querySelector('.board-host')) {
-    app.innerHTML =
-      '<main class="table">' +
-      '<h1 class="table-title">Wordtable</h1>' +
-      '<div class="board-host"></div>' +
-      '<div id="prov-score" role="status" aria-live="polite">0 pts</div>' +
-      '<div id="rack" class="rack" role="listbox" aria-label="Rack"></div>' +
-      buildRackActionsHTML() +
-      '<div class="table-actions">' +
-      '<button type="button" data-action="create">Create</button>' +
-      '<button type="button" data-action="join">Join</button>' +
-      '<button type="button" data-action="play">Play</button>' +
-      '</div></main>'
-  }
-  const host = app.querySelector<HTMLElement>('.board-host')
-  const rack = app.querySelector<HTMLElement>('#rack')
-  const actions = app.querySelector<HTMLElement>('#rack-actions')
-  if (host) mountBoardInteractions(host)
-  if (rack) mountRack(rack)
-  if (actions) mountRackActions(actions)
-  const tableActions = app.querySelector<HTMLElement>('.table-actions')
-  if (tableActions && tableActions.dataset.mounted !== '1') {
-    tableActions.dataset.mounted = '1'
-    tableActions.addEventListener('click', (e) => {
-      if ((e.target as HTMLElement).closest?.('button[data-action="play"]')) renderAll()
-    })
-  }
+  mountTable(app)
   renderAll()
 }
 
@@ -99,6 +57,10 @@ declare global {
         provWords: string[]
         provText: string
         selectedRack: number | null
+        lastMove: string[]
+        lastScore: number | null
+        toast: string | null
+        blankPending: { rackIndex: number; sq: string } | null
       }
       reset: () => void
     }
@@ -111,6 +73,7 @@ window.__wordtable = {
   },
   getState: () => {
     const state = gameStore.getState()
+    const ui = uiStore.getState()
     return {
       rack: state.rack.map((t) => (t.isBlank ? '?' : t.face)),
       rackCount: state.rack.length,
@@ -120,10 +83,16 @@ window.__wordtable = {
       provWords: [...state.provWords],
       provText: provScoreText(state.provScore),
       selectedRack: state.selectedRack,
+      lastMove: [...state.lastMove],
+      lastScore: state.lastScore,
+      toast: ui.toast,
+      blankPending: ui.blankPending ? { ...ui.blankPending } : null,
     }
   },
   reset: () => {
     gameStore.getState().reset()
+    uiStore.getState().clearToast()
+    uiStore.getState().closeBlankPicker()
   },
 }
 

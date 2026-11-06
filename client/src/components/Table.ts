@@ -1,0 +1,169 @@
+// Table orchestrator — wires the board↔rack placement loop to the
+// commit/reject feedback contract (issue #8). The game store owns the
+// pending model and the commit result; this module owns the DOM side
+// effects: Play commits (thunk + slam + .last-move + #float-score),
+// illegal words refuse (rack shake + slide-back + `Not in my book: WORD`
+// toast), and undesignated blanks reopen the picker. Event handling stays
+// delegation-style like Board.ts cell markup.
+
+import {
+  buildBoardHTMLWithPending,
+  mountBoardInteractions,
+} from './Board'
+import {
+  buildRackActionsHTML,
+  buildRackTilesHTML,
+  mountRack,
+  mountRackActions,
+  shakeRack,
+} from './Rack'
+import { buildBlankPickerHTML, mountBlankPicker } from './BlankPicker'
+import { buildToastHTML, mountToast, showToastText } from './Toast'
+import {
+  boardToTiles,
+  displayFace,
+  gameStore,
+  provScoreText,
+} from '../store/game'
+import { uiStore } from '../store/ui'
+import { playThunk } from '../audio/sounds'
+
+export function tableSkeletonHTML(): string {
+  return (
+    '<main class="table">' +
+    '<h1 class="table-title">Wordtable</h1>' +
+    '<div class="board-host"></div>' +
+    '<div id="prov-score" role="status" aria-live="polite">0 pts</div>' +
+    '<div id="rack" class="rack" role="listbox" aria-label="Rack"></div>' +
+    buildRackActionsHTML() +
+    '<div class="table-actions">' +
+    '<button type="button" data-action="create">Create</button>' +
+    '<button type="button" data-action="join">Join</button>' +
+    '<button type="button" data-action="play">Play</button>' +
+    '</div>' +
+    '<div id="float-layer" aria-hidden="true"></div>' +
+    buildToastHTML(null) +
+    buildBlankPickerHTML() +
+    '</main>'
+  )
+}
+
+// Score float-up chip: appended synchronously on commit (well inside the
+// 500 ms acceptance window); CSS float-up fades it and a timer removes it.
+export function buildFloatScoreHTML(points: number): string {
+  return `<div id="float-score" class="score-float" role="status">+${points}</div>`
+}
+
+let floatTimer: ReturnType<typeof setTimeout> | null = null
+
+function appendFloatScore(points: number): void {
+  const layer = document.getElementById('float-layer')
+  if (!layer) return
+  if (floatTimer !== null) clearTimeout(floatTimer)
+  layer.innerHTML = buildFloatScoreHTML(points)
+  floatTimer = setTimeout(() => {
+    floatTimer = null
+    layer.innerHTML = ''
+  }, 950)
+}
+
+function markCommitSlam(): void {
+  for (const el of Array.from(document.querySelectorAll('.tile.last-move'))) {
+    el.classList.add('slam')
+  }
+}
+
+// Play handler: snapshot the refusal copy up front (commit slides refused
+// tiles back, clearing pending), then branch on the engine result.
+export function playCommit(): void {
+  const before = gameStore.getState()
+  const fallbackWord = before.pending.map((p) => displayFace(p)).join('')
+  const result = gameStore.getState().commit()
+  if (result.ok) {
+    playThunk()
+    appendFloatScore(result.points)
+    markCommitSlam()
+    return
+  }
+  if (result.reason === 'BLANK_NO_LETTER') {
+    const undesignated = gameStore
+      .getState()
+      .pending.find((p) => p.isBlank && !p.blankAs)
+    if (undesignated) {
+      uiStore.getState().openBlankPicker({
+        rackIndex: -1,
+        sq: undesignated.sq,
+        pendingId: undesignated.id,
+      })
+    }
+    return
+  }
+  if (result.reason === 'EMPTY_MOVE') return
+  const word = (result.word ?? fallbackWord).trim().toUpperCase()
+  showToastText(`Not in my book: ${word}`)
+  shakeRack(document.getElementById('rack'))
+}
+
+// Re-render the store-driven regions. #toast and #blank-picker paint
+// themselves via their own uiStore subscriptions.
+export function renderTable(app: HTMLElement): void {
+  const state = gameStore.getState()
+  const host = app.querySelector<HTMLElement>('.board-host')
+  if (host) {
+    host.innerHTML = buildBoardHTMLWithPending(
+      boardToTiles(state.board),
+      state.pending,
+      state.lastMove,
+    )
+  }
+  const score = app.querySelector<HTMLElement>('#prov-score')
+  if (score) {
+    score.textContent = provScoreText(state.provScore)
+    score.title = state.provWords.join(' ')
+  }
+  const rack = app.querySelector<HTMLElement>('#rack')
+  if (rack) rack.innerHTML = buildRackTilesHTML(state.rack, state.selectedRack)
+}
+
+function ensureMountPoints(app: HTMLElement): void {
+  if (!app.querySelector('.board-host')) {
+    app.innerHTML = tableSkeletonHTML()
+    return
+  }
+  if (!app.querySelector('#toast')) {
+    app.insertAdjacentHTML('beforeend', buildToastHTML(uiStore.getState().toast))
+  }
+  if (!app.querySelector('#blank-picker')) {
+    app.insertAdjacentHTML('beforeend', buildBlankPickerHTML())
+  }
+  if (!app.querySelector('#float-layer')) {
+    app.insertAdjacentHTML('beforeend', '<div id="float-layer" aria-hidden="true"></div>')
+  }
+}
+
+export function mountTableActions(actionsEl: HTMLElement): void {
+  if (actionsEl.dataset.mounted === '1') return
+  actionsEl.dataset.mounted = '1'
+  actionsEl.addEventListener('click', (e) => {
+    const button = (e.target as HTMLElement).closest?.('button[data-action]')
+    if (!button || !actionsEl.contains(button)) return
+    if (button.getAttribute('data-action') === 'play') playCommit()
+  })
+}
+
+export function mountTable(app: HTMLElement): void {
+  ensureMountPoints(app)
+  const host = app.querySelector<HTMLElement>('.board-host')
+  const rack = app.querySelector<HTMLElement>('#rack')
+  const actions = app.querySelector<HTMLElement>('#rack-actions')
+  const tableActions = app.querySelector<HTMLElement>('.table-actions')
+  const picker = app.querySelector<HTMLElement>('#blank-picker')
+  const toast = app.querySelector<HTMLElement>('#toast')
+  if (host) mountBoardInteractions(host)
+  if (rack) mountRack(rack)
+  if (actions) mountRackActions(actions)
+  if (tableActions) mountTableActions(tableActions)
+  if (picker) mountBlankPicker(picker)
+  if (toast) mountToast(toast)
+  renderTable(app)
+}

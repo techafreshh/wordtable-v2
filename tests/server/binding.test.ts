@@ -189,3 +189,118 @@ describe('binding private racks', () => {
     expect(JSON.stringify(v1)).not.toContain('Q')
   })
 })
+
+describe('binding chat and emotes (issue #16)', () => {
+  function lobbyTwoSeats(name0 = 'Ann', name1 = 'Bo') {
+    const { registry, binding, sent } = makeBinding()
+    const c0 = binding.handleMessage({ v: 1, m: 'create_room', name: name0 }) as RoomReply & {
+      code: string
+      token: string
+    }
+    const code = String(c0['code'])
+    const t0 = String(c0['token'])
+    const j1 = binding.handleMessage({ v: 1, m: 'join_room', code, name: name1 }) as RoomReply & {
+      token: string
+    }
+    const t1 = String(j1['token'])
+    void registry
+    return { binding, sent, code, t0, t1 }
+  }
+
+  it('truncates 250-char chat to 200 chars and fans out to both seats', () => {
+    const { binding, sent, code, t0 } = lobbyTwoSeats()
+    sent.length = 0
+    const long = 'x'.repeat(250)
+    const reply = binding.handleMessage({ v: 1, m: 'chat', code, token: t0, text: long })
+    expect(reply['ok']).toBe(true)
+    expect(reply['chat_ok']).toBe(true)
+    expect(String(reply['text'])).toHaveLength(200)
+    expect(reply['from']).toBe('Ann')
+    expect(typeof reply['ts']).toBe('number')
+    // Broadcast reaches every seat with the same truncated text.
+    expect(sent).toHaveLength(2)
+    for (const s of sent) {
+      expect(s.frame['m']).toBe('chat')
+      expect(s.frame['code']).toBe(code)
+      expect(String(s.frame['text'])).toHaveLength(200)
+      expect(s.frame['from']).toBe('Ann')
+    }
+  })
+
+  it('fans out lobby chat before start_game identically to table chat', () => {
+    const { binding, sent, code, t0, t1 } = lobbyTwoSeats()
+    sent.length = 0
+    const lobbyReply = binding.handleMessage({ v: 1, m: 'chat', code, token: t1, message: 'gl hf' })
+    expect(lobbyReply['ok']).toBe(true)
+    expect(lobbyReply['from']).toBe('Bo')
+    expect(sent).toHaveLength(2)
+    expect(sent.map((s) => s.seat).sort()).toEqual([0, 1])
+    for (const s of sent) expect(s.frame['text']).toBe('gl hf')
+    // Same fan-out after the game starts.
+    binding.handleMessage({ v: 1, m: 'start_game', code, token: t0 })
+    sent.length = 0
+    const tableReply = binding.handleMessage({ v: 1, m: 'chat', code, token: t0, body: 'your move' })
+    expect(tableReply['ok']).toBe(true)
+    expect(sent).toHaveLength(2)
+    for (const s of sent) expect(s.frame['text']).toBe('your move')
+  })
+
+  it('rejects blank, whitespace, missing and non-string chat with BAD_TEXT', () => {
+    const { binding, code, t0 } = lobbyTwoSeats()
+    for (const bad of [
+      { v: 1, m: 'chat', code, token: t0, text: '' },
+      { v: 1, m: 'chat', code, token: t0, text: '   ' },
+      { v: 1, m: 'chat', code, token: t0 },
+      { v: 1, m: 'chat', code, token: t0, text: 42 },
+      { v: 1, m: 'emote', code, token: t0, emote: '  ' },
+      { v: 1, m: 'emote', code, token: t0 },
+    ]) {
+      const reply = binding.handleMessage(bad)
+      expect(reply).toMatchObject({ ok: false, error: 'BAD_TEXT', reason: 'BAD_TEXT' })
+    }
+  })
+
+  it('emotes carry the wire substring emote\":\"👏\" and mirror text', () => {
+    const { binding, sent, code, t0 } = lobbyTwoSeats()
+    sent.length = 0
+    const reply = binding.handleMessage({ v: 1, m: 'emote', code, token: t0, emote: '👏' })
+    expect(reply['ok']).toBe(true)
+    expect(reply['emote_ok']).toBe(true)
+    expect(reply['emote']).toBe('👏')
+    expect(reply['text']).toBe('👏')
+    expect(sent).toHaveLength(2)
+    for (const s of sent) {
+      expect(s.frame['m']).toBe('emote')
+      expect(JSON.stringify(s.frame)).toContain('emote\":\"👏')
+      expect(s.frame['text']).toBe('👏')
+    }
+  })
+
+  it('accepts the text/message alias for emotes', () => {
+    const { binding, code, t0 } = lobbyTwoSeats()
+    const reply = binding.handleMessage({ v: 1, m: 'emote', code, token: t0, text: '😂' })
+    expect(reply['ok']).toBe(true)
+    expect(reply['emote']).toBe('😂')
+  })
+
+  it('caps a 20-char join name to a 16-char chat from', () => {
+    const { binding, sent, code, t0 } = lobbyTwoSeats('x'.repeat(20), 'Bo')
+    sent.length = 0
+    const reply = binding.handleMessage({ v: 1, m: 'chat', code, token: t0, text: 'hi' })
+    expect(reply['ok']).toBe(true)
+    expect(String(reply['from'])).toHaveLength(16)
+    for (const s of sent) expect(String(s.frame['from'])).toHaveLength(16)
+  })
+
+  it('requires auth: unknown rooms and bad tokens never fan out', () => {
+    const { binding, sent } = lobbyTwoSeats()
+    sent.length = 0
+    expect(
+      binding.handleMessage({ v: 1, m: 'chat', code: 'ZZZZ', token: 'nope', text: 'hi' }),
+    ).toMatchObject({ ok: false, error: 'NO_ROOM' })
+    expect(
+      binding.handleMessage({ v: 1, m: 'emote', code: 'ZZZZ', token: 'nope', emote: '👏' }),
+    ).toMatchObject({ ok: false, error: 'NO_ROOM' })
+    expect(sent).toHaveLength(0)
+  })
+})

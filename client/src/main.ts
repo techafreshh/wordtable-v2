@@ -28,6 +28,8 @@ import {
 } from './components/StartScreen'
 import { buildSetupHTML, mountSetup } from './components/Setup'
 import { buildLobbyHTML, mountLobby } from './components/Lobby'
+import { buildChatBubbleHTML } from './components/ChatBubble'
+import { buildChatPanelHTML } from './components/ChatPanel'
 import { buildHotSeatTableHTML, mountHotSeatTable } from './components/HotSeatTable'
 import { buildRecapHTML, mountRecap } from './components/Recap'
 import { buildToastHTML, mountToast } from './components/Toast'
@@ -252,6 +254,22 @@ function render(): void {
   paintedHash = window.location.hash
 }
 
+// Lobby chat repaint (issue #16): the lobby route hosts the same
+// `#chat-root` bubble/panel as the table, so uiStore chat traffic
+// (broadcasts via net.handleFrame, badge bumps, toggles) repaints it
+// without a full route render. Draft text is preserved like the table.
+function repaintLobbyChat(): void {
+  if (currentRoute() !== 'lobby') return
+  const host = screenHost()
+  const chatRoot = host?.querySelector<HTMLElement>('#chat-root')
+  if (!chatRoot) return
+  const ui = uiStore.getState()
+  const next =
+    buildChatBubbleHTML(ui.unread, ui.chatOpen) +
+    buildChatPanelHTML(ui.chat, ui.chatOpen)
+  if (chatRoot.innerHTML !== next) chatRoot.innerHTML = next
+}
+
 // Test/black-box hook: the legacy placement-table fields (issues #7-9)
 // drive their stores, and the session fields force the offline loop
 // (six passes, rematch, snapshot) without touching the DOM.
@@ -264,6 +282,8 @@ declare global {
       setScores: (s: number[]) => void
       sendChat: (text: string) => boolean
       receiveChat: (from: string, text: string) => boolean
+      sendChatOnline: (text: string) => Promise<NetReply>
+      sendEmote: (emote: string) => Promise<NetReply>
       getState: () => {
         rack: string[]
         rackCount: number
@@ -325,6 +345,8 @@ function installHook(): void {
     sendChat: (text: string) => uiStore.getState().sendChat(text),
     receiveChat: (from: string, text: string) =>
       uiStore.getState().receiveChat(from, text),
+    sendChatOnline: (text: string) => net.sendChat(text),
+    sendEmote: (emote: string) => net.sendEmote(emote),
     getState: () => {
       const state = gameStore.getState()
       const ui = uiStore.getState()
@@ -385,6 +407,7 @@ function boot(): void {
   startRouter(() => handleRoute())
   gameStore.subscribe(repaintLegacyTable)
   uiStore.subscribe(repaintLegacyTable)
+  uiStore.subscribe(repaintLobbyChat)
   // Session intents (button passes, bot auto-pass, hook forcing) repaint
   // the table/recap/lobby. Start/setup keep their inputs: no session
   // intent can fire while they are showing (seat 0 is always human).

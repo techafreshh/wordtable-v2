@@ -1,8 +1,10 @@
 // Chat panel (issue #9): `#chat-panel` with the `#chat-log` message list,
 // a three-emote row (👏 😂 👍 in that order) and a 200-char text input.
-// Sends go through `uiStore.sendChat`, so blank input shows nothing and
-// long input truncates — mirroring the engine chat contract.
+// Offline sends echo through `uiStore.sendChat`; online sends (issue #16)
+// ride `net.sendChat`/`net.sendEmote` and the broadcast repopulates the
+// log via handleFrame, so blank input shows nothing either way.
 
+import { net, netStore } from '../store/net'
 import { uiStore, type ChatMessage } from '../store/ui'
 
 export const EMOTES: readonly string[] = ['👏', '😂', '👍']
@@ -42,9 +44,28 @@ export function buildChatPanelHTML(chat: ChatMessage[], open: boolean): string {
   )
 }
 
+// Online when the net store holds a seat and the socket is (re)connected.
+function isOnline(): boolean {
+  try {
+    const s = netStore.getState()
+    if (typeof s.code !== 'string' || s.code === '') return false
+    if (typeof s.token !== 'string' || s.token === '') return false
+    return s.status === 'online' || s.status === 'reconnecting'
+  } catch {
+    return false
+  }
+}
+
 function sendInputText(root: HTMLElement): void {
   const input = root.querySelector<HTMLInputElement>('.chat-input')
   if (!input) return
+  if (input.value.trim() === '') return
+  if (isOnline()) {
+    // Fire-and-forget: the broadcast repopulates the log via handleFrame.
+    void net.sendChat(input.value)
+    input.value = ''
+    return
+  }
   if (uiStore.getState().sendChat(input.value)) input.value = ''
 }
 
@@ -55,7 +76,13 @@ export function mountChatPanel(el: HTMLElement): void {
     const target = e.target as HTMLElement
     const emote = target.closest?.('[data-emote]')
     if (emote && el.contains(emote)) {
-      uiStore.getState().sendChat(emote.getAttribute('data-emote') ?? '')
+      const value = emote.getAttribute('data-emote') ?? ''
+      if (value.trim() === '') return
+      if (isOnline()) {
+        void net.sendEmote(value)
+        return
+      }
+      uiStore.getState().sendChat(value)
       return
     }
     const send = target.closest?.('[data-action="send-chat"]')

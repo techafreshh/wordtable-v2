@@ -37,6 +37,11 @@ It is identical to `../docs/protocol.md` in the Godot prototype repo
 | `chat` | `code`+`token`, `text` | `chat_ok:true`, `from`, `text`, `ts` |
 | `emote` | `code`+`token`, `text` | `emote_ok:true`, `from`, `text`, `ts` |
 
+Chat/emote fan out to every seat in the room (lobby and table alike):
+`{m:'chat', code, from, text, ts}` and
+`{m:'emote', code, from, text, emote:text, ts}`. The emote frame carries
+the value under both `text` and `emote` so `emote":"👏` holds on the wire.
+
 ## Error codes
 
 `NO_ROOM`, `ROOM_FULL`, `NOT_HOST`, `NO_TOKEN`, `BAD_TOKEN`, `BAD_STATE`,

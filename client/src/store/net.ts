@@ -257,9 +257,13 @@ export function handleFrame(frame: Record<string, unknown>): void {
     return
   }
   if (m === 'chat' || m === 'emote') {
+    const text =
+      m === 'emote'
+        ? String(frame['text'] ?? frame['emote'] ?? '')
+        : String(frame['text'] ?? '')
     uiStore
       .getState()
-      .receiveChat(String(frame['from'] ?? ''), String(frame['text'] ?? ''))
+      .receiveChat(String(frame['from'] ?? ''), text)
   }
 }
 
@@ -700,6 +704,22 @@ export const net = {
       String(f ?? ''),
     )
     return sendRequest({ v: 1, m: 'exchange', ...auth, tiles })
+  },
+
+  // Online chat (issue #16): single-flight intents, auth-guarded like
+  // every other intent. The broadcast fans the text back into the log
+  // via handleFrame, so the reply itself writes no store state.
+  sendChat(text: string): Promise<NetReply> {
+    const auth = authFields()
+    if (auth === null) return Promise.resolve({ ok: false, error: 'NO_ROOM' })
+    return sendRequest({ v: 1, m: 'chat', ...auth, text: String(text ?? '') })
+  },
+
+  sendEmote(emote: string): Promise<NetReply> {
+    const auth = authFields()
+    if (auth === null) return Promise.resolve({ ok: false, error: 'NO_ROOM' })
+    const text = String(emote ?? '')
+    return sendRequest({ v: 1, m: 'emote', ...auth, emote: text, text })
   },
 };
 

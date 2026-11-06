@@ -38,32 +38,53 @@ export function playThunk(): void {
   }
 }
 
-// Isolated so the Howler import + construction cost happens only on the
-// first successful commit, and any failure stays inside the try/catch.
-let thunkTried = false
+// Isolated so the Howler import + construction cost happens only once, while
+// every successful commit still replays the cached thunk. Any failure stays
+// inside the try/catch so sound degrades to a silent no-op.
+let thunkHowl: { play(): void } | null = null
+let thunkPromise: Promise<{ play(): void } | null> | null = null
 
 function playThunkHowl(): void {
-  if (thunkTried) return
-  thunkTried = true
-  void import('howler')
-    .then((mod) => {
+  try {
+    if (!isSoundEnabled()) return
+    if (thunkHowl) {
+      try {
+        thunkHowl.play()
+      } catch {
+        // Autoplay denied or no audio device: stay silent.
+      }
+      return
+    }
+    if (thunkPromise === null) {
+      thunkPromise = import('howler')
+        .then((mod) => {
+          try {
+            const howl = new mod.Howl({
+              src: ['sounds/thunk.wav'],
+              volume: 0.5,
+              preload: true,
+            })
+            thunkHowl = howl
+            return howl as { play(): void }
+          } catch {
+            // Missing asset or audio stack: stay silent.
+            return null
+          }
+        })
+        .catch(() => {
+          // Howler itself unavailable: stay silent.
+          return null
+        })
+    }
+    void thunkPromise.then((howl) => {
       try {
         if (!isSoundEnabled()) return
-        const howl = new mod.Howl({
-          src: ['sounds/thunk.wav'],
-          volume: 0.5,
-          preload: true,
-        })
-        try {
-          howl.play()
-        } catch {
-          // Autoplay denied or no audio device: stay silent.
-        }
+        howl?.play()
       } catch {
-        // Missing asset or audio stack: stay silent.
+        // Autoplay denied or no audio device: stay silent.
       }
     })
-    .catch(() => {
-      // Howler itself unavailable: stay silent.
-    })
+  } catch {
+    // Sound must never break a commit.
+  }
 }

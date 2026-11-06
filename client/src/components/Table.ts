@@ -99,8 +99,16 @@ export function playCommit(): void {
     return
   }
   if (result.reason === 'EMPTY_MOVE') return
-  const word = (result.word ?? fallbackWord).trim().toUpperCase()
-  showToastText(`Not in my book: ${word}`)
+  // Only lexicon refusals present the `Not in my book: WORD` copy.
+  // Geometry refusals (FIRST_MOVE_STAR, NOT_CONNECTED, NOT_CONTIGUOUS,
+  // TILE_CONFLICT, OUT_OF_BOUNDS) already slid back via commit's recall;
+  // shake the rack for feedback but never mislabel them as lexicon misses.
+  if (result.reason === 'NOT_IN_LEXICON') {
+    const word = (result.word ?? fallbackWord).trim().toUpperCase()
+    showToastText(`Not in my book: ${word}`)
+    shakeRack(document.getElementById('rack'))
+    return
+  }
   shakeRack(document.getElementById('rack'))
 }
 

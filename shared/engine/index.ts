@@ -1,4 +1,5 @@
 export * from './bag'
+export * from './game'
 export * from './board'
 export * from './dictionary'
 export * from './rules'

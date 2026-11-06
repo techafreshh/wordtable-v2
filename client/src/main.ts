@@ -31,11 +31,19 @@ import { buildLobbyHTML, mountLobby } from './components/Lobby'
 import { buildHotSeatTableHTML, mountHotSeatTable } from './components/HotSeatTable'
 import { buildRecapHTML, mountRecap } from './components/Recap'
 import { buildToastHTML, mountToast } from './components/Toast'
+import { ensureReconnectOverlay } from './components/ReconnectOverlay'
 import { mountTable, renderTable, tableSkeletonHTML } from './components/Table'
 import { gameStore, provScoreText } from './store/game'
 import { DEFAULT_SEAT_NAMES, uiStore } from './store/ui'
 import { sessionStore } from './store/session'
-import { hasServerUrlParam, net, netStore, type NetReply } from './store/net'
+import {
+  connectAndRejoin,
+  hasServerUrlParam,
+  net,
+  netStore,
+  readPersistedNet,
+  type NetReply,
+} from './store/net'
 import { TileBag } from '../../shared/engine/bag'
 import { isBackdropDisabled } from './three/backdrop-guard'
 
@@ -144,6 +152,17 @@ function render(): void {
     return
   }
   uiStore.getState().setScreen(route)
+  // Reconnect overlay (issue #15): every route hosts `#reconnect-overlay`
+  // so a mid-game drop shows `Reconnecting…` wherever the user is. The
+  // node is (re)mounted after each paint because route branches replace
+  // `host.innerHTML`, which would destroy a top-of-render node.
+  const ensureOverlay = (): void => {
+    try {
+      ensureReconnectOverlay(host)
+    } catch {
+      // Overlay mount is decorative; route paint stays authoritative.
+    }
+  }
   switch (route) {
     case 'start': {
       // StartScreen above the legacy Table: offline Create/Join toasts
@@ -229,6 +248,7 @@ function render(): void {
       break
     }
   }
+  ensureOverlay()
   paintedHash = window.location.hash
 }
 
@@ -268,6 +288,8 @@ declare global {
       connect: (url?: string) => Promise<NetReply>
       createRoom: (name: string) => Promise<NetReply>
       joinRoom: (code: string, name: string) => Promise<NetReply>
+      rejoin: () => Promise<NetReply>
+      disconnect: () => void
       startGame: () => Promise<NetReply>
       netState: () => {
         url: string
@@ -337,6 +359,8 @@ function installHook(): void {
     connect: (url?: string) => net.connect(url),
     createRoom: (name: string) => net.createRoom(name),
     joinRoom: (code: string, name: string) => net.joinRoom(code, name),
+    rejoin: () => net.rejoin(),
+    disconnect: () => net.disconnect(),
     startGame: () => net.startGame(),
     netState: () => ({ ...netStore.getState() }),
     pass: () => {
@@ -375,8 +399,15 @@ function boot(): void {
   // Online table (issue #14): dial only when the boot URL carries an
   // explicit `?server-url=`. A bare `/` load stays offline so the
   // `#/start` probes never see a socket.
+  // Tab-reload resume (issue #15): persisted code+token reclaim the same
+  // seat via `rejoin`, restoring the turn without re-entering the code.
   try {
-    if (hasServerUrlParam()) void net.connect()
+    ensureReconnectOverlay(app)
+    if (hasServerUrlParam()) {
+      const stored = readPersistedNet()
+      if (stored.code && stored.token) void connectAndRejoin()
+      else void net.connect()
+    }
   } catch {
     // Offline boot is the default; a failed dial never breaks the table.
   }

@@ -1,0 +1,211 @@
+/* Mirrors client/styles/hud.css — bundled import path for Vite. */
+
+#player-strip {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  width: min(94vw, 600px);
+}
+
+.seat {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: var(--radius-md);
+  background: var(--wood-dark);
+  color: var(--ivory-dim);
+  border: 1px solid transparent;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.seat.active {
+  color: var(--ivory);
+  border-color: var(--brass);
+  outline: 2px solid var(--brass);
+  outline-offset: 1px;
+  box-shadow: 0 0 0 3px rgba(232, 201, 122, 0.45), 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.seat-name {
+  max-width: 18ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seat-score {
+  min-width: 2ch;
+  text-align: right;
+  color: var(--brass-hot);
+  font-variant-numeric: tabular-nums;
+}
+
+#timer-ring {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+}
+
+#timer-ring svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+#timer-ring .ring-bg {
+  fill: none;
+  stroke: rgba(232, 201, 122, 0.25);
+  stroke-width: 3;
+}
+
+#timer-ring .ring-fg {
+  fill: none;
+  stroke: var(--brass-hot);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+#chat-bubble {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 30;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 1px solid var(--brass);
+  background: linear-gradient(150deg, var(--wood) 0%, var(--wood-dark) 100%);
+  color: var(--ivory);
+  font-size: 1.4rem;
+  cursor: pointer;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+#chat-bubble[hidden] { display: none; }
+
+.unread-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 22px;
+  text-align: center;
+}
+
+.unread-badge[hidden] { display: none; }
+
+#chat-panel {
+  position: fixed;
+  right: 1rem;
+  bottom: 4.5rem;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: min(86vw, 300px);
+  padding: 0.75rem;
+  border-radius: var(--radius-md);
+  background: linear-gradient(150deg, var(--wood) 0%, var(--wood-dark) 100%);
+  border: 1px solid var(--brass);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+#chat-panel[hidden] { display: none; }
+
+#chat-log {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.chat-msg {
+  display: flex;
+  gap: 0.4rem;
+  align-items: baseline;
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+.chat-from {
+  flex: 0 0 auto;
+  color: var(--brass-hot);
+  font-weight: 700;
+}
+
+.chat-text { color: var(--ivory); }
+
+.emote-row {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.emote-row button {
+  border: 1px solid var(--brass);
+  border-radius: var(--radius-sm);
+  background: var(--wood-dark);
+  font-size: 1.25rem;
+  line-height: 1;
+  padding: 0.4rem 0.6rem;
+  cursor: pointer;
+}
+
+.chat-input-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.chat-input {
+  flex: 1;
+  min-width: 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--brass);
+  background: var(--wood-dark);
+  color: var(--ivory);
+  font-family: var(--font-stack);
+  padding: 0.45rem 0.6rem;
+}
+
+.chat-input-row button {
+  border: none;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  padding: 0.45rem 0.9rem;
+  font-family: var(--font-stack);
+  font-weight: 700;
+  background: var(--brass);
+  color: var(--wood-dark);
+}
+
+#sound-toggle {
+  border: 1px solid var(--brass);
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  padding: 0.45rem 1rem;
+  font-family: var(--font-stack);
+  font-weight: 700;
+  background: var(--wood-dark);
+  color: var(--brass-hot);
+  letter-spacing: 0.02em;
+}
+
+@media (max-width: 480px) {
+  #player-strip { gap: 0.35rem; }
+  .seat { padding: 0.3rem 0.55rem; font-size: 0.85rem; }
+  #timer-ring { width: 22px; height: 22px; }
+  #chat-bubble { right: 0.75rem; bottom: 0.75rem; }
+  #chat-panel { right: 0.75rem; bottom: 4rem; }
+}

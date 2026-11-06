@@ -19,6 +19,15 @@ import {
 } from './Rack'
 import { buildBlankPickerHTML, mountBlankPicker } from './BlankPicker'
 import { buildToastHTML, mountToast, showToastText } from './Toast'
+import { buildPlayerStripHTML, mountPlayerStrip } from './PlayerStrip'
+import { buildChatBubbleHTML, mountChatBubble } from './ChatBubble'
+import { buildChatPanelHTML, mountChatPanel } from './ChatPanel'
+import {
+  buildSoundToggleHTML,
+  mountSoundToggle,
+  repaintSoundToggle,
+} from './SoundToggle'
+import { isSoundOn } from '../audio/bank'
 import {
   boardToTiles,
   displayFace,
@@ -32,6 +41,9 @@ export function tableSkeletonHTML(): string {
   return (
     '<main class="table">' +
     '<h1 class="table-title">Wordtable</h1>' +
+    '<div id="player-strip"></div>' +
+    '<div id="chat-root"></div>' +
+    buildSoundToggleHTML(isSoundOn()) +
     '<div class="board-host"></div>' +
     '<div id="prov-score" role="status" aria-live="polite">0 pts</div>' +
     '<div id="rack" class="rack" role="listbox" aria-label="Rack"></div>' +
@@ -112,6 +124,43 @@ export function playCommit(): void {
   shakeRack(document.getElementById('rack'))
 }
 
+// HUD chrome (issue #9): the player strip, chat bubble/panel and sound
+// toggle paint from the uiStore on every render. The chat draft survives
+// repaint: the typed value and focus are restored when the panel markup
+// is replaced underneath an active input.
+function renderHud(app: HTMLElement): void {
+  const ui = uiStore.getState()
+  const strip = app.querySelector<HTMLElement>('#player-strip')
+  if (strip) {
+    const next = buildPlayerStripHTML(ui.seats, ui.scores, ui.turn)
+    if (strip.outerHTML !== next) strip.outerHTML = next
+  }
+  const chatRoot = app.querySelector<HTMLElement>('#chat-root')
+  if (chatRoot) {
+    const input = chatRoot.querySelector<HTMLInputElement>('.chat-input')
+    const draft = input?.value ?? ''
+    const focused =
+      input !== null &&
+      input !== undefined &&
+      input.ownerDocument.activeElement === input
+    const next =
+      buildChatBubbleHTML(ui.unread, ui.chatOpen) +
+      buildChatPanelHTML(ui.chat, ui.chatOpen)
+    if (chatRoot.innerHTML !== next) {
+      chatRoot.innerHTML = next
+      if (draft !== '' || focused) {
+        const restored = chatRoot.querySelector<HTMLInputElement>('.chat-input')
+        if (restored) {
+          restored.value = draft
+          if (focused) restored.focus()
+        }
+      }
+    }
+  }
+  const toggle = app.querySelector<HTMLElement>('#sound-toggle')
+  if (toggle) repaintSoundToggle(toggle)
+}
+
 // Re-render the store-driven regions. #toast and #blank-picker paint
 // themselves via their own uiStore subscriptions.
 export function renderTable(app: HTMLElement): void {
@@ -131,12 +180,36 @@ export function renderTable(app: HTMLElement): void {
   }
   const rack = app.querySelector<HTMLElement>('#rack')
   if (rack) rack.innerHTML = buildRackTilesHTML(state.rack, state.selectedRack)
+  renderHud(app)
 }
 
 function ensureMountPoints(app: HTMLElement): void {
   if (!app.querySelector('.board-host')) {
     app.innerHTML = tableSkeletonHTML()
     return
+  }
+  const boardHost = app.querySelector('.board-host')
+  if (!app.querySelector('#player-strip')) {
+    const holder = document.createElement('div')
+    holder.innerHTML = buildPlayerStripHTML(
+      uiStore.getState().seats,
+      uiStore.getState().scores,
+      uiStore.getState().turn,
+    )
+    const strip = holder.firstElementChild
+    if (strip && boardHost) boardHost.before(strip)
+  }
+  if (!app.querySelector('#chat-root')) {
+    const chatRoot = document.createElement('div')
+    chatRoot.id = 'chat-root'
+    if (boardHost) boardHost.before(chatRoot)
+    else app.append(chatRoot)
+  }
+  if (!app.querySelector('#sound-toggle')) {
+    const holder = document.createElement('div')
+    holder.innerHTML = buildSoundToggleHTML(isSoundOn())
+    const toggle = holder.firstElementChild
+    if (toggle && boardHost) boardHost.before(toggle)
   }
   if (!app.querySelector('#toast')) {
     app.insertAdjacentHTML('beforeend', buildToastHTML(uiStore.getState().toast))
@@ -161,6 +234,9 @@ export function mountTableActions(actionsEl: HTMLElement): void {
 
 export function mountTable(app: HTMLElement): void {
   ensureMountPoints(app)
+  const strip = app.querySelector<HTMLElement>('#player-strip')
+  const chatRoot = app.querySelector<HTMLElement>('#chat-root')
+  const soundToggle = app.querySelector<HTMLElement>('#sound-toggle')
   const host = app.querySelector<HTMLElement>('.board-host')
   const rack = app.querySelector<HTMLElement>('#rack')
   const actions = app.querySelector<HTMLElement>('#rack-actions')
@@ -173,5 +249,11 @@ export function mountTable(app: HTMLElement): void {
   if (tableActions) mountTableActions(tableActions)
   if (picker) mountBlankPicker(picker)
   if (toast) mountToast(toast)
+  if (strip) mountPlayerStrip(strip)
+  if (chatRoot) {
+    mountChatBubble(chatRoot)
+    mountChatPanel(chatRoot)
+  }
+  if (soundToggle) mountSoundToggle(soundToggle)
   renderTable(app)
 }

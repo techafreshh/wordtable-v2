@@ -255,9 +255,9 @@ describe('envelope dispatcher', () => {
     expect(registry.get(String(created.code))?.seats[0].name).toHaveLength(16)
   })
 
-  it('stubs unbound game methods with BAD_STATE', () => {
+  it('stubs out-of-scope methods with BAD_STATE', () => {
     const registry = new RoomRegistry()
-    for (const m of ['start_game', 'place_tiles', 'chat', 'emote']) {
+    for (const m of ['add_bot', 'remove_bot', 'rematch', 'chat', 'emote']) {
       expect(handleRoomMessage({ v: 1, m, code: 'AAAA', token: 't' }, registry)).toMatchObject({
         ok: false,
         error: 'BAD_STATE',

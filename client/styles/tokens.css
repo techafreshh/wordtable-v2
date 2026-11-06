@@ -1,0 +1,21 @@
+/* Canonical warm-club design tokens for Wordtable. This is the frozen
+ * palette every later screen (rack, chat, recap) inherits. The bundled
+ * copy at client/src/styles/tokens.css mirrors this file. */
+
+:root {
+  --wood-dark: #2e1a12;
+  --wood: #3d2416;
+  --felt: #1e4a3a;
+  --felt-bright: #2b6a52;
+  --ivory: #f5eedd;
+  --ivory-dim: #d9cdb3;
+  --brass: #c9a45c;
+  --brass-hot: #e8c97a;
+  --danger: #c94f4f;
+  --good: #6fbe6f;
+
+  --font-stack: ui-rounded, "SF Pro Rounded", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+}

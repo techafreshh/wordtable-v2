@@ -30,6 +30,16 @@ export type CommitResult =
   | { ok: true; points: number; words: string[] }
   | { ok: false; reason: RuleReason | 'EMPTY_MOVE'; word?: string }
 
+// Authoritative snapshot projection (issue #14): the fields the server's
+// `viewFor`/`boardTilesFor` fan out on every `state_sync` broadcast.
+// `board_tiles` entries carry algebra (`square`) or `{row,col}` plus
+// `letter`/`blank`; `rack` faces use '?' for blanks.
+export interface StateSyncSnapshot {
+  board_tiles?: unknown
+  rack?: unknown
+  [key: string]: unknown
+}
+
 interface GameStoreState {
   rack: Tile[]
   pending: PendingTile[]
@@ -51,6 +61,11 @@ interface GameStoreState {
   recall: () => void
   shuffle: () => void
   reset: () => void
+  // Online projection (issue #14): rebuild board + rack from the
+  // server's authoritative snapshot (see StateSyncSnapshot above).
+  applyStateSync: (snapshot: StateSyncSnapshot) => void
+  // Leave an online room: drop the authoritative board/rack.
+  resetOnline: () => void
   // Validate pending against the lexicon; on success write the board, mark
   // lastMove and refill the rack, on refusal (except BLANK_NO_LETTER)
   // slide the tiles back to the rack.
@@ -124,6 +139,38 @@ function normalizeSquare(sq: string): string | null {
   } catch {
     return null
   }
+}
+
+// Row/col pair (`{r,c}` aliases) checked without throwing, mirroring
+// `parseSquare` bounds so hostile frames skip instead of crashing.
+function rowColAlgebra(obj: Record<string, unknown>): string | null {
+  const rowRaw = obj['row'] ?? obj['r']
+  const colRaw = obj['col'] ?? obj['c']
+  const row = typeof rowRaw === 'number' ? rowRaw : Number(rowRaw)
+  const col = typeof colRaw === 'number' ? colRaw : Number(colRaw)
+  if (
+    Number.isInteger(row) &&
+    Number.isInteger(col) &&
+    row >= 0 &&
+    row < BOARD_SIZE &&
+    col >= 0 &&
+    col < BOARD_SIZE
+  ) {
+    return toAlgebra(row, col)
+  }
+  return null
+}
+
+// Snapshot square (issue #14): algebra (`square`/`sq`, plain or nested)
+// or a flat `{row,col}` pair, exactly as `boardTilesFor` emits.
+function snapshotSquare(entry: Record<string, unknown>): string | null {
+  const raw = entry['square'] ?? entry['sq']
+  if (typeof raw === 'string') return normalizeSquare(raw)
+  if (typeof raw === 'object' && raw !== null) {
+    const nested = rowColAlgebra(raw as Record<string, unknown>)
+    if (nested !== null) return nested
+  }
+  return rowColAlgebra(entry)
 }
 
 function cleanLetter(letter: string | undefined): string | null {
@@ -281,6 +328,75 @@ export const gameStore = createStore<GameStoreState>()((set, get) => {
       bag = new TileBag(1)
       commitState([...rack, ...returned], [], null)
       set({ board: emptyGrid(), lastMove: [], lastScore: null })
+    },
+
+    // Online projection (issue #14): rebuild board + rack from the
+    // server's authoritative `state_sync` snapshot. Unknown squares
+    // and bad letters are skipped, never thrown. Server state wins,
+    // so local pending predictions clear and highlight ownership
+    // resets (`lastMove` = snapshot squares, `lastScore` = null).
+    applyStateSync: (snapshot) => {
+      const tiles = Array.isArray(snapshot.board_tiles)
+        ? snapshot.board_tiles
+        : []
+      const grid = emptyGrid()
+      const squares: string[] = []
+      for (const entry of tiles) {
+        if (typeof entry !== 'object' || entry === null) continue
+        const sq = snapshotSquare(entry as Record<string, unknown>)
+        if (sq === null) continue
+        const rawLetter = (entry as Record<string, unknown>)['letter']
+        const letter =
+          typeof rawLetter === 'string' ? cleanLetter(rawLetter) : null
+        if (letter === null) continue
+        const { row, col } = parseSquare(sq)
+        grid[row][col] = {
+          letter,
+          blank: (entry as Record<string, unknown>)['blank'] === true,
+        }
+        squares.push(sq)
+      }
+      const faces = Array.isArray(snapshot.rack) ? snapshot.rack : []
+      const rack: Tile[] = []
+      for (const face of faces) {
+        if (typeof face === 'string') {
+          const tile = tileOf(face)
+          if (tile) rack.push(tile)
+        } else if (typeof face === 'object' && face !== null) {
+          const obj = face as Record<string, unknown>
+          if (obj['isBlank'] === true || obj['face'] === '?') {
+            rack.push({ face: '?', isBlank: true })
+          } else if (typeof obj['face'] === 'string') {
+            const tile = tileOf(obj['face'])
+            if (tile) rack.push(tile)
+          }
+        }
+      }
+      set({
+        board: grid,
+        rack: rack.slice(0, 7),
+        pending: [],
+        selectedRack: null,
+        provScore: 0,
+        provWords: [],
+        lastMove: squares,
+        lastScore: null,
+      })
+    },
+
+    // Leave an online room: drop the authoritative board/rack without
+    // touching the offline bag, so a later offline loop redeals fresh.
+    resetOnline: () => {
+      set({
+        board: emptyGrid(),
+        rack: [],
+        pending: [],
+        selectedRack: null,
+        provScore: 0,
+        provWords: [],
+        lastMove: [],
+        lastScore: null,
+      })
     },
 
     commit: () => {

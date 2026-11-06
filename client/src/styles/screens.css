@@ -328,3 +328,24 @@ input.seat-bot:disabled {
   .podium-row { font-size: 0.9rem; }
   #word-history { font-size: 0.85rem; max-height: 180px; }
 }
+
+/* Reconnect overlay (issue #15): full-screen dim while the net layer
+ * redials. `hidden` removes it from paint entirely; the warm-club tokens
+ * keep it in the contracted naming style. */
+#reconnect-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20, 12, 4, 0.72);
+  color: var(--ivory);
+  font-family: var(--font-stack);
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+#reconnect-overlay[hidden] {
+  display: none;
+}

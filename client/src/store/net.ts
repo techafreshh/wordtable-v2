@@ -14,7 +14,7 @@ export const DEFAULT_SERVER_URL = 'ws://localhost:9080'
 export const NET_CODE_KEY = 'wordtable.net.code'
 export const NET_TOKEN_KEY = 'wordtable.net.token'
 
-export type NetStatus = 'offline' | 'connecting' | 'online'
+export type NetStatus = 'offline' | 'connecting' | 'online' | 'reconnecting'
 
 export interface NetReply {
   ok: boolean
@@ -28,6 +28,10 @@ export interface NetState {
   code: string | null
   token: string | null
   seat: number | null
+  // Redial position shown by the reconnect overlay: 0-based count of
+  // failed attempts since the drop. Mirrors the module `reconnectAttempt`
+  // so DOM subscribers repaint without touching socket internals.
+  reconnectAttempt: number
 }
 
 // Browser-native transport only: the server's `ws` package must never enter
@@ -283,12 +287,167 @@ function onSocketMessage(data: unknown): void {
   handleFrame(record)
 }
 
+// Reconnect backoff (issue #15): client-timed exponential redial. First
+// retry fires within ~250 ms (inside the 500 ms overlay window), then
+// 500/1000/2000 ms, capped at 5 s with ±10% jitter. Unbounded attempts
+// until success or an explicit disconnect.
+export const RECONNECT_DELAYS_MS = [250, 500, 1000, 2000, 5000]
+export const RECONNECT_MAX_DELAY_MS = 5000
+
+export function reconnectDelayMs(attempt: number): number {
+  const safe = Number.isInteger(attempt) && attempt > 0 ? attempt : 0
+  const base =
+    RECONNECT_DELAYS_MS[Math.min(safe, RECONNECT_DELAYS_MS.length - 1)] ??
+    RECONNECT_MAX_DELAY_MS
+  const jittered = base + (Math.random() * 0.2 - 0.1) * base
+  return Math.min(RECONNECT_MAX_DELAY_MS, Math.max(0, Math.round(jittered)))
+}
+
+// Overlay copy lives here (not in the component) so the store layer can
+// repaint a mounted node without importing DOM code (no import cycle).
+export function reconnectOverlayText(attempt: number): string {
+  const n = Number.isInteger(attempt) && attempt >= 0 ? attempt + 1 : 1
+  return `Reconnecting\u2026 attempt ${n}`
+}
+
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+let reconnectAttempt = 0
+let manualClose = false
+let redialling = false
+
+function clearReconnectTimer(): void {
+  if (reconnectTimer !== null) {
+    clearTimeout(reconnectTimer)
+    reconnectTimer = null
+  }
+}
+
+// Best-effort synchronous repaint of a mounted `#reconnect-overlay`.
+// The overlay component subscribes to netStore and repaints the same way;
+// this keeps the 500 ms acceptance window even for drops that land
+// between mount and subscription. Never throws (node/test has no DOM).
+function paintReconnectOverlay(): void {
+  try {
+    const doc = typeof document !== 'undefined' ? document : null
+    const el = doc?.getElementById('reconnect-overlay')
+    if (!el) return
+    const state = netStore.getState()
+    if (state.status === 'reconnecting') {
+      el.removeAttribute('hidden')
+      el.textContent = reconnectOverlayText(state.reconnectAttempt)
+    } else {
+      el.setAttribute('hidden', '')
+    }
+  } catch {
+    // Overlay paint must never break the socket teardown path.
+  }
+}
+
+// Arm the next redial. Requires stored creds: with no code+token there is
+// no seat to reclaim, so the client stays offline exactly as before.
+function scheduleReconnect(): void {
+  if (manualClose) return
+  const auth = authFields() ?? persistedAuth()
+  if (auth === null) {
+    if (netStore.getState().status !== 'offline') {
+      netStore.setState({ status: 'offline', reconnectAttempt: 0 })
+    }
+    paintReconnectOverlay()
+    return
+  }
+  const delay = reconnectDelayMs(reconnectAttempt)
+  netStore.setState({ status: 'reconnecting', reconnectAttempt })
+  paintReconnectOverlay()
+  clearReconnectTimer()
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null
+    void attemptReconnect()
+  }, delay)
+  try {
+    ;(
+      reconnectTimer as unknown as { unref?: () => void }
+    ).unref?.()
+  } catch {
+    // Browser timers have no unref; node unref keeps tests hermetic.
+  }
+}
+
+// One redial: fresh socket on the stored URL, then the same code+token
+// `rejoin` whose `state_sync` snapshot restores board/rack/turn exactly.
+async function attemptReconnect(): Promise<void> {
+  if (manualClose) return
+  const auth = authFields() ?? persistedAuth()
+  if (auth === null) {
+    stopReconnect()
+    netStore.setState({ status: 'offline', reconnectAttempt: 0 })
+    paintReconnectOverlay()
+    return
+  }
+  redialling = true
+  let dialled: NetReply
+  try {
+    dialled = await dial(netStore.getState().url)
+  } finally {
+    redialling = false
+  }
+  if (manualClose) return
+  if (!dialled.ok) {
+    reconnectAttempt += 1
+    scheduleReconnect()
+    return
+  }
+  const reply = await net.rejoin()
+  if (manualClose) return
+  if (reply.ok) {
+    reconnectAttempt = 0
+    netStore.setState({ status: 'online', reconnectAttempt: 0 })
+    paintReconnectOverlay()
+    return
+  }
+  const err = typeof reply.error === 'string' ? reply.error : ''
+  if (err === 'BAD_TOKEN' || err === 'NO_TOKEN' || err === 'NO_ROOM') {
+    // Auth refusal: no seat to reclaim (the server minted nothing).
+    // Stop the loop, drop the dead creds, surface the reason via toast.
+    stopReconnect()
+    clearPersistedNet()
+    netStore.setState({ status: 'offline', reconnectAttempt: 0 })
+    paintReconnectOverlay()
+    try {
+      uiStore.getState().showToast(err)
+    } catch {
+      // Toast is best-effort; the offline state above is authoritative.
+    }
+    return
+  }
+  // Transient refusal (e.g. a NOT_CONNECTED race): back off and retry.
+  reconnectAttempt += 1
+  scheduleReconnect()
+}
+
+// Cancel pending redials and reset the backoff. The caller owns the
+// resulting status paint (connect dials, disconnect goes offline).
+export function stopReconnect(): void {
+  clearReconnectTimer()
+  reconnectAttempt = 0
+  if (netStore.getState().reconnectAttempt !== 0) {
+    netStore.setState({ reconnectAttempt: 0 })
+  }
+}
+
 function onSocketClose(): void {
   socket = null
   failAll('DISCONNECTED')
-  if (netStore.getState().status !== 'offline') {
-    netStore.setState({ status: 'offline' })
+  if (manualClose) {
+    if (netStore.getState().status !== 'offline') {
+      netStore.setState({ status: 'offline', reconnectAttempt: 0 })
+    }
+    paintReconnectOverlay()
+    return
   }
+  // A redial socket that dies before open is owned by attemptReconnect:
+  // it reschedules itself once the dial promise settles.
+  if (redialling) return
+  scheduleReconnect()
 }
 
 export const netStore = createStore<NetState>()(() => ({
@@ -297,6 +456,7 @@ export const netStore = createStore<NetState>()(() => ({
   code: null,
   token: null,
   seat: null,
+  reconnectAttempt: 0,
 }))
 
 function seatOf(reply: Record<string, unknown>): number | null {
@@ -330,59 +490,79 @@ function authFields(): { code: string; token: string } | null {
   return { code, token }
 }
 
+// Raw dial: opens one socket on `target` and resolves on open/close/error.
+// The public `net.connect` resets the reconnect loop around it; the redial
+// path calls `dial` directly so backoff progress survives across retries.
+function dial(target: string): Promise<NetReply> {
+  const Ctor = socketCtor()
+  if (Ctor === null) return Promise.resolve({ ok: false, error: 'NO_SOCKET' })
+  try {
+    if (socket !== null) {
+      try {
+        socket.close()
+      } catch {
+        // A stale socket must never block the new dial.
+      }
+      socket = null
+    }
+    failAll('DISCONNECTED')
+    // A redial keeps `reconnecting` (overlay stays up) instead of
+    // flashing `connecting`; only the final rejoin flips to `online`.
+    netStore.setState({
+      url: target,
+      status: redialling ? 'reconnecting' : 'connecting',
+    })
+    const next = new Ctor(target)
+    socket = next
+    return new Promise<NetReply>((resolve) => {
+      let settled = false
+      const settle = (reply: NetReply): void => {
+        if (settled) return
+        settled = true
+        resolve(reply)
+      }
+      next.addEventListener('open', () => {
+        if (!redialling) netStore.setState({ status: 'online' })
+        settle({ ok: true })
+      })
+      next.addEventListener('close', () => {
+        if (socket === next) onSocketClose()
+        settle({ ok: false, error: 'NOT_CONNECTED' })
+      })
+      next.addEventListener('error', () => {
+        if (socket === next) onSocketClose()
+        settle({ ok: false, error: 'NOT_CONNECTED' })
+      })
+      next.addEventListener('message', (ev: Event) => {
+        if (socket !== next) return
+        onSocketMessage((ev as unknown as { data?: unknown }).data)
+      })
+    })
+  } catch {
+    socket = null
+    netStore.setState({ status: 'offline' })
+    return Promise.resolve({ ok: false, error: 'NOT_CONNECTED' })
+  }
+}
+
 export const net = {
   connect(url?: string): Promise<NetReply> {
     const target =
       typeof url === 'string' && url.trim() !== ''
         ? normalizeUrl(url)
         : resolveServerUrl()
-    const Ctor = socketCtor()
-    if (Ctor === null) return Promise.resolve({ ok: false, error: 'NO_SOCKET' })
-    try {
-      if (socket !== null) {
-        try {
-          socket.close()
-        } catch {
-          // A stale socket must never block the new dial.
-        }
-        socket = null
-      }
-      failAll('DISCONNECTED')
-      netStore.setState({ url: target, status: 'connecting' })
-      const next = new Ctor(target)
-      socket = next
-      return new Promise<NetReply>((resolve) => {
-        let settled = false
-        const settle = (reply: NetReply): void => {
-          if (settled) return
-          settled = true
-          resolve(reply)
-        }
-        next.addEventListener('open', () => {
-          netStore.setState({ status: 'online' })
-          settle({ ok: true })
-        })
-        next.addEventListener('close', () => {
-          if (socket === next) onSocketClose()
-          settle({ ok: false, error: 'NOT_CONNECTED' })
-        })
-        next.addEventListener('error', () => {
-          if (socket === next) onSocketClose()
-          settle({ ok: false, error: 'NOT_CONNECTED' })
-        })
-        next.addEventListener('message', (ev: Event) => {
-          if (socket !== next) return
-          onSocketMessage((ev as unknown as { data?: unknown }).data)
-        })
-      })
-    } catch {
-      socket = null
-      netStore.setState({ status: 'offline' })
-      return Promise.resolve({ ok: false, error: 'NOT_CONNECTED' })
-    }
+    // A fresh explicit dial owns the socket: cancel redials first so a
+    // stale timer can never steal this socket via attemptReconnect.
+    manualClose = false
+    reconnectAttempt = 0
+    stopReconnect()
+    return dial(target)
   },
 
   disconnect(): void {
+    // Explicit close: no overlay, no redial — onSocketClose stays offline.
+    manualClose = true
+    stopReconnect()
     const sock = socket
     socket = null
     if (sock !== null) {
@@ -393,7 +573,8 @@ export const net = {
       }
     }
     failAll('DISCONNECTED')
-    netStore.setState({ status: 'offline' })
+    netStore.setState({ status: 'offline', reconnectAttempt: 0 })
+    paintReconnectOverlay()
   },
 
   createRoom(name: string): Promise<NetReply> {
@@ -462,7 +643,23 @@ export const net = {
     const auth = authFields() ?? persistedAuth()
     if (auth === null) return Promise.resolve({ ok: false, error: 'NO_ROOM' })
     return sendRequest({ v: 1, m: 'rejoin', ...auth }).then((reply) => {
-      if (reply.ok) handleFrame({ ...reply, m: 'state_sync' })
+      if (!reply.ok) return reply
+      // Reclaim refreshes the in-memory seat: after a tab reload only
+      // persisted creds exist, and later intents read memory first.
+      const code =
+        typeof reply['code'] === 'string' && reply['code'] !== ''
+          ? reply['code']
+          : auth.code
+      const token =
+        typeof reply['token'] === 'string' && reply['token'] !== ''
+          ? reply['token']
+          : auth.token
+      netStore.setState({
+        code,
+        token,
+        seat: seatOf(reply) ?? netStore.getState().seat ?? 0,
+      })
+      handleFrame({ ...reply, m: 'state_sync' })
       return reply
     })
   },
@@ -519,10 +716,28 @@ function persistedAuth(): { code: string; token: string } | null {
   return null
 }
 
+// Boot resume (issue #15): dial the stored URL, then reclaim the seat
+// with the persisted code+token so a tab reload restores the turn without
+// re-entering the code. Returns the dial reply when there is nothing to
+// reclaim (offline default keeps bare `/` loads socket-free).
+export function connectAndRejoin(url?: string): Promise<NetReply> {
+  return net.connect(url).then((dialled) => {
+    if (!dialled.ok) return dialled
+    const auth = authFields() ?? persistedAuth()
+    if (auth === null) return dialled
+    return net.rejoin()
+  })
+}
+
 // Test seam: drop the socket and outbox without touching localStorage
 // (persisted creds survive reloads by design), mirroring
 // `resetSessionForTests` disarm discipline in store/session.ts.
+// Also clears reconnect timers so redials never leak between tests.
 export function resetNetForTests(): void {
+  clearReconnectTimer()
+  reconnectAttempt = 0
+  manualClose = false
+  redialling = false
   const sock = socket
   socket = null
   if (sock !== null) {
@@ -540,6 +755,7 @@ export function resetNetForTests(): void {
     code: null,
     token: null,
     seat: null,
+    reconnectAttempt: 0,
   })
 }
 

@@ -19,6 +19,7 @@ import {
 } from './Rack'
 import { buildBlankPickerHTML, mountBlankPicker } from './BlankPicker'
 import { buildToastHTML, mountToast, showToastText } from './Toast'
+import { buildReconnectOverlayHTML } from './ReconnectOverlay'
 import { buildPlayerStripHTML, mountPlayerStrip } from './PlayerStrip'
 import { buildChatBubbleHTML, mountChatBubble } from './ChatBubble'
 import { buildChatPanelHTML, mountChatPanel } from './ChatPanel'
@@ -55,6 +56,7 @@ export function tableSkeletonHTML(): string {
     '</div>' +
     '<div id="float-layer" aria-hidden="true"></div>' +
     buildToastHTML(null) +
+    buildReconnectOverlayHTML(false, 0) +
     buildBlankPickerHTML() +
     '</main>'
   )
@@ -219,6 +221,9 @@ function ensureMountPoints(app: HTMLElement): void {
   }
   if (!app.querySelector('#float-layer')) {
     app.insertAdjacentHTML('beforeend', '<div id="float-layer" aria-hidden="true"></div>')
+  }
+  if (!app.querySelector('#reconnect-overlay')) {
+    app.insertAdjacentHTML('beforeend', buildReconnectOverlayHTML(false, 0))
   }
 }
 

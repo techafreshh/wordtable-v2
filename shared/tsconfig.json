@@ -7,8 +7,8 @@
     "moduleResolution": "bundler",
     "isolatedModules": true,
     "moduleDetection": "force",
-    "declaration": true,
-    "emitDeclarationOnly": true,
+    "noEmit": true,
+    "tsBuildInfoFile": "../node_modules/.cache/tsbuildinfo/shared.tsbuildinfo",
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true

@@ -6,6 +6,8 @@
     "skipLibCheck": true,
     "moduleResolution": "bundler",
     "isolatedModules": true,
+    "noEmit": true,
+    "tsBuildInfoFile": "../node_modules/.cache/tsbuildinfo/tests.tsbuildinfo",
     "strict": true,
     "types": ["node", "vitest/globals", "vite/client"]
   },

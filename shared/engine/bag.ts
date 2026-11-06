@@ -70,6 +70,10 @@ export class TileBag {
     return this.tiles.splice(0, Math.min(n, this.tiles.length))
   }
 
+  returnTiles(tiles: Tile[]): void {
+    this.tiles.push(...tiles)
+  }
+
   remaining(): number {
     return this.tiles.length
   }

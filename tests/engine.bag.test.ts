@@ -27,4 +27,12 @@ describe('TileBag', () => {
     bag.draw(7)
     expect(bag.remaining()).toBe(93)
   })
+
+  it('returnTiles appends without reshuffling and restores the count', () => {
+    const bag = new TileBag(7)
+    const drawn = bag.draw(7)
+    expect(bag.remaining()).toBe(93)
+    bag.returnTiles(drawn)
+    expect(bag.remaining()).toBe(100)
+  })
 })

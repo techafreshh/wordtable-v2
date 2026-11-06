@@ -241,6 +241,56 @@ describe('create/join replies', () => {
     expect(netStore.getState().code).toBeNull()
   })
 
+  it('joining a different room never sends the stale token', async () => {
+    const sock = await connected()
+    const created = net.createRoom('Ann')
+    sock.receive(GOOD_REPLY)
+    await created
+    expect(netStore.getState().code).toBe('ABCD')
+    sock.sent.length = 0
+
+    const join = net.joinRoom('WXYZ', 'Bo')
+    expect(JSON.parse(sock.sent[0] ?? '{}')).toMatchObject({
+      v: 1,
+      m: 'join_room',
+      code: 'WXYZ',
+    })
+    expect('token' in JSON.parse(sock.sent[0] ?? '{}')).toBe(false)
+    sock.receive({ m: 'join_room', ok: true, code: 'WXYZ', token: 'token-wxyz-0002', seat: 0 })
+    await expect(join).resolves.toMatchObject({ ok: true, code: 'WXYZ' })
+    expect(netStore.getState().code).toBe('WXYZ')
+  })
+
+  it('rejoining the same room code reclaims with the stored token', async () => {
+    const sock = await connected()
+    const created = net.createRoom('Ann')
+    sock.receive(GOOD_REPLY)
+    await created
+    sock.sent.length = 0
+
+    const join = net.joinRoom('abcd', 'Ann')
+    expect(JSON.parse(sock.sent[0] ?? '{}')).toMatchObject({
+      v: 1,
+      m: 'join_room',
+      token: 'token-0123456789',
+    })
+    sock.receive({ ...GOOD_REPLY, seat: 0 })
+    await expect(join).resolves.toMatchObject({ ok: true })
+  })
+
+  it('an explicit token arg is always attached', async () => {
+    const sock = await connected()
+    const join = net.joinRoom('WXYZ', 'Bo', 'explicit-token-1')
+    expect(JSON.parse(sock.sent[0] ?? '{}')).toMatchObject({
+      v: 1,
+      m: 'join_room',
+      code: 'WXYZ',
+      token: 'explicit-token-1',
+    })
+    sock.receive({ m: 'join_room', ok: true, code: 'WXYZ', token: 'explicit-token-1', seat: 0 })
+    await expect(join).resolves.toMatchObject({ ok: true })
+  })
+
   it('refuses to send while offline', async () => {
     await expect(net.createRoom('Ann')).resolves.toEqual({
       ok: false,

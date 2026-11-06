@@ -409,16 +409,48 @@ export const net = {
   },
 
   joinRoom(code: string, name: string, token?: string): Promise<NetReply> {
+    const rawCode = String(code ?? '')
     const payload: Record<string, unknown> = {
       v: 1,
       m: 'join_room',
-      code: String(code ?? ''),
+      code: rawCode,
       name: String(name ?? ''),
     }
     const explicit = typeof token === 'string' && token !== '' ? token : null
-    const stored = explicit ?? netStore.getState().token ?? readPersistedNet().token
-    if (stored !== null && stored !== undefined && stored !== '') {
-      payload['token'] = stored
+    if (explicit !== null) {
+      payload['token'] = explicit
+    } else {
+      // Reclaim only applies to the same room: a stored token from any
+      // other room reads as BAD_TOKEN on the server (rooms.ts `join`),
+      // so a different-code join must seat a fresh player token-free.
+      const wanted = rawCode.trim().toUpperCase()
+      const state = netStore.getState()
+      const memoryCode =
+        typeof state.code === 'string' ? state.code.trim().toUpperCase() : ''
+      if (
+        wanted !== '' &&
+        memoryCode !== '' &&
+        memoryCode === wanted &&
+        typeof state.token === 'string' &&
+        state.token !== ''
+      ) {
+        payload['token'] = state.token
+      } else {
+        const stored = readPersistedNet()
+        const persistedCode =
+          typeof stored.code === 'string'
+            ? stored.code.trim().toUpperCase()
+            : ''
+        if (
+          wanted !== '' &&
+          persistedCode !== '' &&
+          persistedCode === wanted &&
+          typeof stored.token === 'string' &&
+          stored.token !== ''
+        ) {
+          payload['token'] = stored.token
+        }
+      }
     }
     return sendRequest(payload).then((reply) => {
       if (!reply.ok) return reply

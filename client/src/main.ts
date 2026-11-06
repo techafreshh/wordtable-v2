@@ -35,6 +35,7 @@ import { mountTable, renderTable, tableSkeletonHTML } from './components/Table'
 import { gameStore, provScoreText } from './store/game'
 import { DEFAULT_SEAT_NAMES, uiStore } from './store/ui'
 import { sessionStore } from './store/session'
+import { hasServerUrlParam, net, netStore, type NetReply } from './store/net'
 import { TileBag } from '../../shared/engine/bag'
 import { isBackdropDisabled } from './three/backdrop-guard'
 
@@ -264,6 +265,17 @@ declare global {
         unread: number
       }
       reset: () => void
+      connect: (url?: string) => Promise<NetReply>
+      createRoom: (name: string) => Promise<NetReply>
+      joinRoom: (code: string, name: string) => Promise<NetReply>
+      startGame: () => Promise<NetReply>
+      netState: () => {
+        url: string
+        status: string
+        code: string | null
+        token: string | null
+        seat: number | null
+      }
       pass: () => void
       rematch: () => void
       snapshot: () => LocalSnapshot | null
@@ -322,6 +334,11 @@ function installHook(): void {
       uiStore.getState().closeBlankPicker()
       bootHudFromURL()
     },
+    connect: (url?: string) => net.connect(url),
+    createRoom: (name: string) => net.createRoom(name),
+    joinRoom: (code: string, name: string) => net.joinRoom(code, name),
+    startGame: () => net.startGame(),
+    netState: () => ({ ...netStore.getState() }),
     pass: () => {
       sessionStore.getState().passTurn()
     },
@@ -355,6 +372,14 @@ function boot(): void {
   installHook()
   render()
   gameStore.getState().setRack(readSeededFaces() ?? dealFaces())
+  // Online table (issue #14): dial only when the boot URL carries an
+  // explicit `?server-url=`. A bare `/` load stays offline so the
+  // `#/start` probes never see a socket.
+  try {
+    if (hasServerUrlParam()) void net.connect()
+  } catch {
+    // Offline boot is the default; a failed dial never breaks the table.
+  }
   // Table backdrop (issue #11): ambient felt scene behind the board.
   // Board-first boot — the backdrop mounts after the 225-square grid,
   // and any failure (including ?nogl=1) keeps the CSS gradient fallback.

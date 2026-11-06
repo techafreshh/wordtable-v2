@@ -36,6 +36,7 @@ import { gameStore, provScoreText } from './store/game'
 import { DEFAULT_SEAT_NAMES, uiStore } from './store/ui'
 import { sessionStore } from './store/session'
 import { TileBag } from '../../shared/engine/bag'
+import { initTableBackdrop } from './three/table'
 
 // Offline table boot (issues #7/#8): the rack plus placement loop lives
 // in the client. `?rack=HELLO??` seeds the rack (1-7 chars of A-Z/?,
@@ -354,6 +355,15 @@ function boot(): void {
   installHook()
   render()
   gameStore.getState().setRack(readSeededFaces() ?? dealFaces())
+  // Table backdrop (issue #11): ambient felt scene behind the board.
+  // Board-first boot — the backdrop mounts after the 225-square grid,
+  // and any failure (including ?nogl=1) keeps the CSS gradient fallback.
+  try {
+    const backdrop = document.getElementById('backdrop')
+    if (backdrop !== null) initTableBackdrop(backdrop)
+  } catch {
+    // Decorative only: a backdrop failure must never break the board.
+  }
 }
 
 boot()

@@ -8,9 +8,9 @@ TypeScript + Vite rebuild of the Scrabble-style word game.
 ## Quickstart
 
 ```sh
-npm install
-npm run dev        # client on :5173, proxy ws:/ -> :9080
-npm run server     # Node ws server on :9080 (optional for offline play)
+npm ci
+npm run dev        # client on :5173 + server on :9080 together
+npm run server     # Node server on :9080 standalone (PORT=9090 or --port=9090 to override)
 npm test           # vitest
 ```
 

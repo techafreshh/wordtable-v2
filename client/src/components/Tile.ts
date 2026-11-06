@@ -13,6 +13,7 @@ export interface TileRenderOpts {
   rackIndex?: number
   pendingId?: number
   draggable?: boolean
+  lastMove?: boolean
 }
 
 function esc(value: string): string {
@@ -27,11 +28,17 @@ export function buildTileHTML(tile: Tile, opts: TileRenderOpts = {}): string {
   const classes = ['tile']
   if (opts.pending === true) classes.push('pending')
   if (opts.selected === true) classes.push('selected')
-  const face = tile.isBlank ? '?' : tile.face
+  if (opts.lastMove === true) classes.push('last-move')
+  // A designated blank shows its picker letter but stays a blank (value
+  // 0); an undesignated blank shows '?'. data-blank marks blanks so the
+  // letter face never reads as a real tile.
+  const designated = (tile.blankAs ?? '').trim().toUpperCase()
+  const face = tile.isBlank ? (/^[A-Z]$/.test(designated) ? designated : '?') : tile.face
   let attrs =
     `class="${classes.join(' ')}"` +
     ` draggable="${opts.draggable === false ? 'false' : 'true'}"` +
     ` data-tile="${esc(face)}"`
+  if (tile.isBlank) attrs += ' data-blank="true"'
   if (opts.rackIndex !== undefined) attrs += ` data-rack-index="${opts.rackIndex}"`
   if (opts.pendingId !== undefined) attrs += ` data-pending-id="${opts.pendingId}"`
   if (opts.selected === true) attrs += ' aria-selected="true"'
@@ -80,8 +87,12 @@ export function mountTileAttrs(el: HTMLElement, tile: Tile, opts: TileRenderOpts
   el.classList.add('tile')
   el.classList.toggle('pending', opts.pending === true)
   el.classList.toggle('selected', opts.selected === true)
+  el.classList.toggle('last-move', opts.lastMove === true)
   el.setAttribute('draggable', opts.draggable === false ? 'false' : 'true')
-  el.dataset.tile = tile.isBlank ? '?' : tile.face
+  const designated = (tile.blankAs ?? '').trim().toUpperCase()
+  el.dataset.tile = tile.isBlank ? (/^[A-Z]$/.test(designated) ? designated : '?') : tile.face
+  if (tile.isBlank) el.dataset.blank = 'true'
+  else delete el.dataset.blank
   if (opts.rackIndex !== undefined) el.dataset.rackIndex = String(opts.rackIndex)
   if (opts.pendingId !== undefined) el.dataset.pendingId = String(opts.pendingId)
   if (opts.selected === true) el.setAttribute('aria-selected', 'true')

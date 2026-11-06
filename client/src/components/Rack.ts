@@ -80,6 +80,16 @@ export function mountRack(rackEl: HTMLElement): void {
   })
 }
 
+// Reject feedback (issue #8): shake the rack, then settle. The pending
+// tiles are already back via the store recall; the shake is pure motion.
+export function shakeRack(rackEl: HTMLElement | null): void {
+  if (!rackEl) return
+  rackEl.classList.remove('shake')
+  void rackEl.offsetWidth
+  rackEl.classList.add('shake')
+  window.setTimeout(() => rackEl.classList.remove('shake'), 300)
+}
+
 export function mountRackActions(actionsEl: HTMLElement): void {
   if (actionsEl.dataset.mounted === '1') return
   actionsEl.dataset.mounted = '1'

@@ -25,3 +25,98 @@
 .rack.shake { animation: shake-x 240ms ease; }
 .score-float { animation: float-up 900ms ease-out; }
 .tile.deal { animation: deal-in 260ms ease both; }
+
+/* Commit highlight: the last played word glows until the next commit. */
+.tile.last-move {
+  outline: 2px solid var(--brass-hot);
+  outline-offset: 1px;
+  box-shadow: 0 0 0 3px rgba(232, 201, 122, 0.45), 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+/* Refusal toast: fixed above the rack, hidden until a toast is set. */
+#toast {
+  position: fixed;
+  left: 50%;
+  bottom: 96px;
+  transform: translateX(-50%);
+  z-index: 30;
+  max-width: min(92vw, 420px);
+  padding: 0.6rem 1.1rem;
+  border-radius: var(--radius-md);
+  background: var(--wood-dark);
+  color: var(--ivory);
+  border: 1px solid var(--danger);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+#toast[hidden] { display: none; }
+
+/* Blank picker: modal veil plus the A-Z sheet. */
+#blank-picker {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  background: rgba(20, 10, 6, 0.55);
+}
+#blank-picker[hidden] { display: none; }
+.picker-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(150deg, var(--wood) 0%, var(--wood-dark) 100%);
+  border: 1px solid var(--brass);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+.picker-title {
+  margin: 0;
+  color: var(--brass-hot);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+.picker-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(40px, 1fr));
+  gap: 0.4rem;
+}
+.picker-grid button,
+.picker-sheet button[data-action="cancel-picker"] {
+  cursor: pointer;
+  border: 1px solid rgba(61, 43, 18, 0.4);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0;
+  font-family: var(--font-stack);
+  font-weight: 700;
+  background: linear-gradient(180deg, #fff8e7 0%, var(--ivory) 60%, var(--ivory-dim) 100%);
+  color: #3d2b12;
+}
+.picker-sheet button[data-action="cancel-picker"] {
+  padding: 0.5rem 1.4rem;
+  background: var(--brass);
+  color: var(--wood-dark);
+}
+
+/* Score float-up layer: pointer-transparent overlay above the board. */
+#float-layer {
+  position: fixed;
+  left: 50%;
+  top: 34%;
+  transform: translateX(-50%);
+  z-index: 35;
+  pointer-events: none;
+}
+#float-score {
+  display: inline-block;
+  padding: 0.3rem 0.9rem;
+  border-radius: 999px;
+  background: var(--wood-dark);
+  color: var(--brass-hot);
+  border: 1px solid var(--brass);
+  font-weight: 700;
+}

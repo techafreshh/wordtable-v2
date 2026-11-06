@@ -1,8 +1,13 @@
 // Offline lobby (issue #10) — plaques for the hot-seat lineup with bot
 // badges, then Start into the table or Edit back to the seat picker.
 // Pure string builder plus a mount, Board.ts style.
+// Online chat (issue #16) reuses the corner bubble/panel so the lobby
+// talks exactly like the table; hud.css already styles both nodes.
 
 import { navigate } from '../router'
+import { buildChatBubbleHTML, mountChatBubble } from './ChatBubble'
+import { buildChatPanelHTML, mountChatPanel } from './ChatPanel'
+import { uiStore } from '../store/ui'
 
 function escapeHTML(value: string): string {
   return value
@@ -35,6 +40,7 @@ export function buildLobbyHTML(names: string[], bots: boolean[]): string {
     '<button type="button" id="lobby-start">Start</button>' +
     '</div>' +
     '</section>' +
+    `<div id="chat-root">${buildChatBubbleHTML(uiStore.getState().unread, uiStore.getState().chatOpen)}${buildChatPanelHTML(uiStore.getState().chat, uiStore.getState().chatOpen)}</div>` +
     '</main>'
   )
 }
@@ -51,4 +57,9 @@ export function mountLobby(
     if (opts?.onEdit) opts.onEdit()
     else navigate('setup')
   })
+  const chatRoot = root.querySelector<HTMLElement>('#chat-root')
+  if (chatRoot) {
+    mountChatBubble(chatRoot)
+    mountChatPanel(chatRoot)
+  }
 }

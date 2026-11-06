@@ -475,3 +475,50 @@ describe('state_sync projection', () => {
     expect(gameStore.getState().lastMove).toHaveLength(0)
   })
 })
+
+describe('online chat intents (issue #16)', () => {
+  it('sends chat/emote payloads with auth over the same socket', async () => {
+    const sock = await connected()
+    const created = net.createRoom('Ann')
+    sock.receive(GOOD_REPLY)
+    await created
+    sock.sent.length = 0
+
+    const chat = net.sendChat('hello table')
+    expect(JSON.parse(sock.sent[0] ?? '{}')).toMatchObject({
+      v: 1,
+      m: 'chat',
+      code: 'ABCD',
+      token: 'token-0123456789',
+      text: 'hello table',
+    })
+    sock.receive({ m: 'chat', ok: true, chat_ok: true, from: 'Ann', text: 'hello table' })
+    await expect(chat).resolves.toMatchObject({ ok: true })
+
+    const emote = net.sendEmote('👏')
+    expect(JSON.parse(sock.sent[1] ?? '{}')).toMatchObject({
+      v: 1,
+      m: 'emote',
+      code: 'ABCD',
+      token: 'token-0123456789',
+      text: '👏',
+      emote: '👏',
+    })
+    sock.receive({ m: 'emote', ok: true, emote_ok: true, from: 'Ann', text: '👏', emote: '👏' })
+    await expect(emote).resolves.toMatchObject({ ok: true })
+  })
+
+  it('refuses chat intents without a seat', async () => {
+    await expect(net.sendChat('hi')).resolves.toEqual({ ok: false, error: 'NO_ROOM' })
+    await expect(net.sendEmote('👏')).resolves.toEqual({ ok: false, error: 'NO_ROOM' })
+  })
+
+  it('routes emote frames via the emote alias and bumps unread when closed', () => {
+    expect(uiStore.getState().chatOpen).toBe(false)
+    expect(uiStore.getState().chat).toHaveLength(0)
+    handleFrame({ m: 'emote', from: 'Rival 1', emote: '👏' })
+    expect(uiStore.getState().chat).toHaveLength(1)
+    expect(uiStore.getState().chat[0]?.text).toBe('👏')
+    expect(uiStore.getState().unread).toBe(1)
+  })
+})

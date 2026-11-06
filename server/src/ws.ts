@@ -5,14 +5,16 @@ import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import { existsSync, statSync, readFileSync } from 'node:fs'
 import { extname, join, normalize, resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { WebSocketServer } from 'ws'
+import { WebSocketServer, type WebSocket } from 'ws'
 import { parsePortArg, resolvePort } from './config.js'
 import {
   RoomRegistry,
   normalizeCode,
-  normalizeName,
   normalizeToken,
 } from './rooms.js'
+import { createBinding, type Binding, type RoomReply } from './binding.js'
+import { Dictionary } from '../../shared/engine/dictionary.js'
+import type { Lexicon } from '../../shared/engine/rules.js'
 
 export const HEALTH_BODY = JSON.stringify({ ok: true })
 
@@ -119,18 +121,16 @@ export function createRequestHandler(staticRoot: string) {
     } catch {
       res.writeHead(404, { 'content-type': 'text/plain' })
       res.end('not found')
-      return
     }
     const contentType = MIME[extname(filePath).toLowerCase()] ?? 'application/octet-stream'
     serveFile(res, filePath, contentType)
   }
 }
 
-// v1 envelope dispatcher (frozen docs/protocol.md). Handles only the room
-// harness trio — create_room, join_room, rejoin/resync — plus envelope
-// errors. Every other documented game method is an explicit not-yet-bound
-// stub answering BAD_STATE until game binding lands.
-export type RoomReply = Record<string, unknown>
+// v1 envelope dispatcher (frozen docs/protocol.md). Room ownership lives in
+// RoomRegistry; game authority lives in the binding (LocalGame per room).
+// Replies echo `m` and carry mirrored `error`/`reason` on failure.
+export type { RoomReply } from './binding.js'
 
 export function okReply(m: string, fields: RoomReply = {}): RoomReply {
   return { m, ok: true, ...fields }
@@ -140,8 +140,39 @@ export function errReply(m: string, error: string): RoomReply {
   return { m, ok: false, error, reason: error }
 }
 
-// Case-insensitive lookup on the key spelling after trim: `CODE`,
-// `Room_Code`, `METHOD` etc. all resolve to their canonical field.
+// One binding per registry so direct handleRoomMessage calls (unit tests)
+// keep game state across frames without any socket plumbing.
+const bindingsByRegistry = new WeakMap<RoomRegistry, Binding>()
+
+function stubLexicon(): Lexicon {
+  return () => true
+}
+
+export function getBindingForRegistry(registry: RoomRegistry): Binding {
+  let binding = bindingsByRegistry.get(registry)
+  if (!binding) {
+    binding = createBinding(registry, {
+      isWord: stubLexicon(),
+      allowDebug: undefined,
+    })
+    bindingsByRegistry.set(registry, binding)
+  }
+  return binding
+}
+
+export function bindRegistryForTesting(registry: RoomRegistry, binding: Binding): void {
+  bindingsByRegistry.set(registry, binding)
+}
+
+export function handleRoomMessage(
+  msg: unknown,
+  registry: RoomRegistry,
+  binding?: Binding,
+): RoomReply {
+  const active = binding ?? getBindingForRegistry(registry)
+  return active.handleMessage(msg)
+}
+
 function getField(obj: RoomReply, ...names: string[]): unknown {
   const wanted = new Set(names.map((n) => n.trim().toLowerCase()))
   for (const key of Object.keys(obj)) {
@@ -150,136 +181,134 @@ function getField(obj: RoomReply, ...names: string[]): unknown {
   return undefined
 }
 
-// Missing v/version means 1; a present version not equal to 1 is BAD_VERSION.
-function normalizeVersion(obj: RoomReply): number | 'BAD' {
-  const raw = getField(obj, 'v', 'version')
-  if (raw === undefined || raw === null) return 1
-  if (typeof raw === 'number') return raw === 1 ? 1 : 'BAD'
-  if (typeof raw === 'string') {
-    const text = raw.trim()
-    if (text === '') return 1
-    return Number(text) === 1 ? 1 : 'BAD'
+function loadLexiconSync(): Lexicon | null {
+  try {
+    const here = dirname(fileURLToPath(import.meta.url))
+    const repoRoot = resolve(here, '../..')
+    for (const candidate of ['dictionaries/sowpods.txt', 'assets/sowpods.txt']) {
+      try {
+        const text = readFileSync(join(repoRoot, candidate), 'utf8')
+        const words = new Set<string>()
+        for (const line of text.split(/\r?\n/)) {
+          const w = line.trim().toUpperCase()
+          if (w !== '' && /^[A-Z]+$/.test(w)) words.add(w)
+        }
+        if (words.size > 0) return (w: string) => {
+          const t = w.trim().toUpperCase()
+          return t !== '' && /^[A-Z]+$/.test(t) && words.has(t)
+        }
+      } catch {
+        // try next candidate
+      }
+    }
+    return null
+  } catch {
+    return null
   }
-  return 'BAD'
 }
 
-function normalizeMethod(obj: RoomReply): { canonical: string; raw: string } | null {
-  const raw = getField(obj, 'm', 'method')
-  if (typeof raw !== 'string') return null
-  const text = raw.trim()
-  if (text === '') return null
-  const lower = text.toLowerCase()
-  const canonical = lower === 'resync' ? 'rejoin' : lower
-  return { canonical, raw: text }
-}
-
-const KNOWN_METHODS = new Set([
-  'create_room',
-  'join_room',
-  'rejoin',
-  'add_bot',
-  'remove_bot',
-  'start_game',
-  'rematch',
-  'place_tiles',
-  'place',
-  'pass',
-  'pass_turn',
-  'exchange',
-  'recall',
-  'shuffle_rack',
-  'shuffle',
-  'get_rack',
-  'rack',
-  'debug_set_rack',
-  'debug_set_bag',
-  'chat',
-  'emote',
-])
-
-// Documented game methods with no binding yet in this harness lap.
-const UNBOUND_METHODS = new Set([
-  'add_bot',
-  'remove_bot',
-  'start_game',
-  'rematch',
-  'place_tiles',
-  'place',
-  'pass',
-  'pass_turn',
-  'exchange',
-  'recall',
-  'shuffle_rack',
-  'shuffle',
-  'get_rack',
-  'rack',
-  'debug_set_rack',
-  'debug_set_bag',
-  'chat',
-  'emote',
-])
-
-export function handleRoomMessage(msg: unknown, registry: RoomRegistry): RoomReply {
-  if (typeof msg !== 'object' || msg === null || Array.isArray(msg)) {
-    return errReply('unknown', 'BAD_JSON')
+async function loadLexicon(): Promise<Lexicon> {
+  const sync = loadLexiconSync()
+  if (sync) return sync
+  try {
+    const dict = await Dictionary.loadFromFile()
+    return (w: string) => dict.isWord(w)
+  } catch {
+    console.log('wordtable: lexicon missing, skipping word checks')
+    return () => true
   }
-  const obj = msg as RoomReply
-  const method = normalizeMethod(obj)
-  const echoM =
-    method === null ? 'unknown' : KNOWN_METHODS.has(method.canonical) ? method.canonical : method.raw
-  if (normalizeVersion(obj) === 'BAD') return errReply(echoM, 'BAD_VERSION')
-  if (method === null) return errReply('unknown', 'UNKNOWN_MESSAGE')
-  if (!KNOWN_METHODS.has(method.canonical)) return errReply(method.raw, 'UNKNOWN_MESSAGE')
-  const m = method.canonical
-  if (UNBOUND_METHODS.has(m)) return errReply(m, 'BAD_STATE')
-  if (m === 'create_room') {
-    const name = normalizeName(getField(obj, 'name', 'player', 'player_name'))
-    const { room, seat } = registry.create(name)
-    return okReply('create_room', {
-      code: room.code,
-      token: seat.token,
-      seat: seat.seat,
-      you: seat.seat,
-      seats: room.seats.length,
-    })
-  }
-  if (m === 'join_room') {
-    const code = normalizeCode(getField(obj, 'code', 'room', 'room_code'))
-    const name = normalizeName(getField(obj, 'name', 'player', 'player_name'))
-    const token = normalizeToken(getField(obj, 'token', 'session', 'session_token'))
-    const res = registry.join(code, name, token)
-    if (!res.ok) return errReply('join_room', res.error)
-    return okReply('join_room', {
-      code: res.room.code,
-      token: res.seat.token,
-      seat: res.seat.seat,
-      you: res.seat.seat,
-      seats: res.room.seats.length,
-    })
-  }
-  // rejoin / resync: minimal harness snapshot; game binding enriches it later.
-  const code = normalizeCode(getField(obj, 'code', 'room', 'room_code'))
-  const token = normalizeToken(getField(obj, 'token', 'session', 'session_token'))
-  const res = registry.rejoin(code, token)
-  if (!res.ok) return errReply('rejoin', res.error)
-  return okReply('rejoin', {
-    code: res.room.code,
-    token: res.seat.token,
-    seat: res.seat.seat,
-    you: res.seat.seat,
-    seats: res.room.seats.length,
-    started: false,
-    turn: 0,
-    scores: res.room.seats.map(() => 0),
-    rack: [],
-    board_tiles: [],
-    over: false,
-  })
 }
 
 export function attachWebSocket(server: Server): WebSocketServer {
   const wss = new WebSocketServer({ server })
   const registry = new RoomRegistry()
+  const syncLexicon = loadLexiconSync()
+  let isWordImpl: Lexicon = syncLexicon ?? (() => true)
+  if (!syncLexicon) {
+    // No bundled word list found synchronously: try the async loader once;
+    // it logs exactly one line if the lexicon stays missing.
+    void loadLexicon().then((fn) => {
+      isWordImpl = fn
+    })
+  }
+  const isWord: Lexicon = (w) => isWordImpl(w)
+  const roomSockets = new Map<string, Set<WebSocket>>()
+  const socketIdentity = new Map<WebSocket, { code: string; seat: number }>()
+
+  function deliver(code: string, seat: number, frame: RoomReply): void {
+    const set = roomSockets.get(code)
+    if (!set) return
+    const text = JSON.stringify(frame)
+    for (const sock of [...set]) {
+      const id = socketIdentity.get(sock)
+      if (id && id.code === code && id.seat === seat) {
+        try {
+          if (sock.readyState === sock.OPEN) sock.send(text)
+        } catch {
+          // a failing recipient never blocks the rest of the fan-out
+        }
+      }
+    }
+  }
+
+  // Request-triggered broadcasts are collected during handleMessage so the
+  // reply frame always hits the wire before any broadcast. Timer-expiry
+  // auto-pass broadcasts happen outside any request and send immediately.
+  let collecting: Array<{ seat: number; frame: RoomReply }> | null = null
+  const binding = createBinding(registry, {
+    isWord,
+    allowDebug: undefined,
+    send: (seat, frame) => {
+      const code = String((frame as RoomReply)['code'] ?? '')
+      if (code === '') return
+      if (collecting !== null) {
+        collecting.push({ seat, frame })
+        return
+      }
+      deliver(code, seat, frame)
+    },
+  })
+  bindingsByRegistry.set(registry, binding)
+
+  function rememberSocket(socket: WebSocket, code: string, seat: number): void {
+    let set = roomSockets.get(code)
+    if (!set) {
+      set = new Set()
+      roomSockets.set(code, set)
+    }
+    set.add(socket)
+    socketIdentity.set(socket, { code, seat })
+  }
+
+  function preMapSocket(socket: WebSocket, parsed: unknown): void {
+    try {
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return
+      const obj = parsed as RoomReply
+      const code = normalizeCode(getField(obj, 'code', 'room', 'room_code'))
+      const token = normalizeToken(getField(obj, 'token', 'session', 'session_token'))
+      if (code === '') return
+      if (token === undefined) return
+      const res = registry.rejoin(code, token)
+      if (res.ok) rememberSocket(socket, res.room.code, res.seat.seat)
+    } catch {
+      // mapping is best-effort; auth errors still reply normally
+    }
+  }
+
+  function postMapSocket(socket: WebSocket, reply: RoomReply): void {
+    try {
+      if (!reply || reply['ok'] !== true) return
+      const codeRaw = reply['code']
+      if (typeof codeRaw !== 'string') return
+      const seatRaw = (reply['seat'] ?? reply['you']) as unknown
+      const seatNum = typeof seatRaw === 'number' ? seatRaw : Number(seatRaw)
+      if (!Number.isInteger(seatNum)) return
+      rememberSocket(socket, codeRaw, seatNum)
+    } catch {
+      // ignore mapping failures
+    }
+  }
+
   wss.on('connection', (socket) => {
     socket.on('message', (data) => {
       let text: string
@@ -301,7 +330,34 @@ export function attachWebSocket(server: Server): WebSocketServer {
         socket.send(JSON.stringify(errReply('unknown', 'BAD_JSON')))
         return
       }
-      socket.send(JSON.stringify(handleRoomMessage(parsed, registry)))
+      preMapSocket(socket, parsed)
+      const queue: Array<{ seat: number; frame: RoomReply }> = []
+      collecting = queue
+      let reply: RoomReply
+      try {
+        reply = binding.handleMessage(parsed)
+      } finally {
+        collecting = null
+      }
+      // Reply first per protocol, then any broadcasts collected above.
+      socket.send(JSON.stringify(reply))
+      postMapSocket(socket, reply)
+      // Flush after mapping so a freshly mapped socket still gets its frame.
+      for (const item of queue) {
+        const code = String(item.frame['code'] ?? '')
+        if (code !== '') deliver(code, item.seat, item.frame)
+      }
+    })
+    socket.on('close', () => {
+      const id = socketIdentity.get(socket)
+      if (id) {
+        const set = roomSockets.get(id.code)
+        if (set) {
+          set.delete(socket)
+          if (set.size === 0) roomSockets.delete(id.code)
+        }
+        socketIdentity.delete(socket)
+      }
     })
   })
   return wss

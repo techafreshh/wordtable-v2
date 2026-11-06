@@ -9,17 +9,10 @@
 import * as THREE from 'three'
 import { createParallax } from './parallax'
 
-// `?nogl=1` anywhere in the query string forces the gradient fallback
-// without constructing a renderer (the graded acceptance path).
-export function isBackdropDisabled(search: string): boolean {
-  const raw = String(search ?? '')
-  try {
-    if (new URLSearchParams(raw).get('nogl') === '1') return true
-  } catch {
-    // URLSearchParams unavailable: fall through to the literal check.
-  }
-  return /(?:^|[?&])nogl=1(?:&|#|$)/.test(raw)
-}
+// `?nogl=1` guard lives in ./backdrop-guard (Three-free) so the entry
+// chunk can check it statically without bundling Three.
+import { isBackdropDisabled } from './backdrop-guard'
+export { isBackdropDisabled }
 
 export interface TableBackdropHandle {
   dispose: () => void

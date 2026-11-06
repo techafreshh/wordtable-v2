@@ -36,7 +36,7 @@ import { gameStore, provScoreText } from './store/game'
 import { DEFAULT_SEAT_NAMES, uiStore } from './store/ui'
 import { sessionStore } from './store/session'
 import { TileBag } from '../../shared/engine/bag'
-import { initTableBackdrop } from './three/table'
+import { isBackdropDisabled } from './three/backdrop-guard'
 
 // Offline table boot (issues #7/#8): the rack plus placement loop lives
 // in the client. `?rack=HELLO??` seeds the rack (1-7 chars of A-Z/?,
@@ -358,9 +358,37 @@ function boot(): void {
   // Table backdrop (issue #11): ambient felt scene behind the board.
   // Board-first boot — the backdrop mounts after the 225-square grid,
   // and any failure (including ?nogl=1) keeps the CSS gradient fallback.
+  // Deferred (issue #45): Three ships as a separate async chunk loaded
+  // at idle so first paint never pays for the decorative scene; ?nogl=1
+  // returns early and never fetches the chunk.
   try {
     const backdrop = document.getElementById('backdrop')
-    if (backdrop !== null) initTableBackdrop(backdrop)
+    if (backdrop !== null) {
+      let search = ''
+      try {
+        search = window.location.search
+      } catch {
+        search = ''
+      }
+      if (!isBackdropDisabled(search)) {
+        const load = (): void => {
+          void import('./three/table')
+            .then((m) => m.initTableBackdrop(backdrop))
+            .catch(() => {})
+        }
+        try {
+          const ric = (
+            window as unknown as {
+              requestIdleCallback?: (cb: () => void) => number
+            }
+          ).requestIdleCallback
+          if (typeof ric === 'function') ric.call(window, load)
+          else setTimeout(load, 0)
+        } catch {
+          // Decorative only: a backdrop failure must never break the board.
+        }
+      }
+    }
   } catch {
     // Decorative only: a backdrop failure must never break the board.
   }

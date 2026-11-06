@@ -4,9 +4,10 @@
 // Placement interactions (issue #7) delegate to the game store so drag-drop
 // and tap-tap share one placeTile path.
 
-import { gameStore, type PendingTile } from '../store/game'
+import { displayFace, gameStore, type PendingTile } from '../store/game'
 import { uiStore } from '../store/ui'
 import { buildTileHTML, getActiveDragIndex, getTileDragPayload, setActiveDragIndex } from './Tile'
+import { openBlankPickerFor } from './BlankPicker'
 
 export const BOARD_SIZE = 15
 
@@ -103,13 +104,18 @@ function premiumText(kind: PremiumKind): string {
   }
 }
 
-function cellHTML(row: number, col: number, tiles: Readonly<Record<string, string>>): string {
+function cellHTML(
+  row: number,
+  col: number,
+  tiles: Readonly<Record<string, string>>,
+  lastMove: ReadonlySet<string> = EMPTY_SET,
+): string {
   const kind = premiumKindAt(row, col)
   const sq = squareLabel(row, col)
   const tile = tiles[sq]
   const inner =
     tile !== undefined
-      ? `<div class="tile" data-tile="${tile}">${tile}</div>`
+      ? `<div class="tile${lastMove.has(sq) ? ' last-move' : ''}" data-tile="${tile}">${tile}</div>`
       : kind === 'STAR'
         ? `<span class="star" aria-hidden="true">★</span>`
         : premiumText(kind) === ''
@@ -123,12 +129,20 @@ function cellHTML(row: number, col: number, tiles: Readonly<Record<string, strin
   )
 }
 
+const EMPTY_SET: ReadonlySet<string> = new Set<string>()
+
 // Full board markup: .board wrapper with exactly 225 .sq children.
-export function buildBoardHTML(tiles: Readonly<Record<string, string>> = {}): string {
+// Squares in `lastMove` render their committed tile with the .last-move
+// highlight (exactly one marker per square, on the tile only).
+export function buildBoardHTML(
+  tiles: Readonly<Record<string, string>> = {},
+  lastMove: readonly string[] = [],
+): string {
+  const last = new Set(lastMove)
   let cells = ''
   for (let row = 0; row < BOARD_SIZE; row++) {
     for (let col = 0; col < BOARD_SIZE; col++) {
-      cells += cellHTML(row, col, tiles)
+      cells += cellHTML(row, col, tiles, last)
     }
   }
   return `<div class="board" role="grid" aria-label="Wordtable board">${cells}</div>`
@@ -145,21 +159,23 @@ export function mountBoard(el: HTMLElement, tiles: Readonly<Record<string, strin
 export function buildBoardHTMLWithPending(
   tiles: Readonly<Record<string, string>> = {},
   pending: readonly PendingTile[] = [],
+  lastMove: readonly string[] = [],
 ): string {
   const bySq = new Map<string, PendingTile>()
   for (const p of pending) bySq.set(p.sq.trim().toUpperCase(), p)
+  const last = new Set(lastMove)
   let cells = ''
   for (let row = 0; row < BOARD_SIZE; row++) {
     for (let col = 0; col < BOARD_SIZE; col++) {
       const sq = squareLabel(row, col)
       const pend = bySq.get(sq)
       if (pend === undefined) {
-        cells += cellHTML(row, col, tiles)
+        cells += cellHTML(row, col, tiles, last)
         continue
       }
       const kind = premiumKindAt(row, col)
       const tile = buildTileHTML(
-        { face: pend.face, isBlank: pend.isBlank },
+        { face: pend.face, isBlank: pend.isBlank, blankAs: pend.blankAs },
         { pending: true, pendingId: pend.id, draggable: false },
       )
       cells +=
@@ -204,7 +220,7 @@ export function renderPending(host: HTMLElement, pending: readonly PendingTile[]
       return
     }
     square.setAttribute('data-pending', 'true')
-    const face = pend.isBlank ? '?' : pend.face
+    const face = displayFace(pend)
     if (
       existing &&
       existing.getAttribute('data-pending-id') === String(pend.id) &&
@@ -216,7 +232,7 @@ export function renderPending(host: HTMLElement, pending: readonly PendingTile[]
     square.insertAdjacentHTML(
       'beforeend',
       buildTileHTML(
-        { face: pend.face, isBlank: pend.isBlank },
+        { face: pend.face, isBlank: pend.isBlank, blankAs: pend.blankAs },
         { pending: true, pendingId: pend.id, draggable: false },
       ),
     )
@@ -230,6 +246,19 @@ function selectedRackIndex(): number | null {
 function clearSelection(): void {
   gameStore.getState().selectRack(null)
   uiStore.getState().selectRack(null)
+}
+
+// Single placement funnel for drops and tap-tap: blanks park in the
+// blank-picker instead of landing undesignated; every other tile places
+// through the game store.
+function placeOrPick(rackIndex: number, sq: string): void {
+  const tile = gameStore.getState().rack[rackIndex]
+  if (!tile) return
+  if (tile.isBlank) {
+    openBlankPickerFor(rackIndex, sq)
+    return
+  }
+  if (gameStore.getState().placeTile(rackIndex, sq)) clearSelection()
 }
 
 // Delegated board interactions (idempotent per host): HTML5 dragover/drop
@@ -262,7 +291,7 @@ export function mountBoardInteractions(host: HTMLElement): void {
     const index =
       getTileDragPayload(e.dataTransfer) ?? getActiveDragIndex() ?? selectedRackIndex()
     if (index === null || index === undefined) return
-    if (gameStore.getState().placeTile(index, sq)) clearSelection()
+    placeOrPick(index, sq)
     setActiveDragIndex(null)
   })
 
@@ -273,7 +302,7 @@ export function mountBoardInteractions(host: HTMLElement): void {
     if (!sq) return
     const selected = selectedRackIndex()
     if (selected !== null && selected !== undefined) {
-      if (gameStore.getState().placeTile(selected, sq)) clearSelection()
+      placeOrPick(selected, sq)
       return
     }
     const pendEl = (e.target as HTMLElement).closest?.('.tile.pending')

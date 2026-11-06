@@ -6,7 +6,6 @@ dist-server/
 *.tsbuildinfo
 *.js
 *.d.ts
-!*.ts
 *.local
 # env
 .env

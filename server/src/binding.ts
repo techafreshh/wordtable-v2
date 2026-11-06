@@ -98,7 +98,15 @@ const KNOWN_METHODS = new Set([
 ])
 
 // Out of scope for this lap (owned by bot/client issues): still BAD_STATE.
-const STILL_UNBOUND = new Set(['add_bot', 'remove_bot', 'rematch', 'chat', 'emote'])
+const STILL_UNBOUND = new Set(['add_bot', 'remove_bot', 'rematch'])
+
+// Chat text contract (issue #16): trim, reject blank/non-string, truncate
+// to 200 chars. Long input truncates — it is never rejected.
+function normalizeChatText(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  const text = raw.trim().slice(0, 200)
+  return text === '' ? null : text
+}
 
 function isDebugAllowed(explicit?: boolean): boolean {
   if (explicit === true) return true
@@ -490,6 +498,47 @@ export function createBinding(registry: RoomRegistry, opts: CreateBindingOpts) {
     if (!auth.ok) return errReply(m, auth.error)
     const seat = auth.seat.seat
     const roomCode = auth.room.code
+
+    // Lobby-safe chat (issue #16): auth-only, no game required. Sits
+    // before the entry gate so lobby and table fan out identically.
+    if (m === 'chat') {
+      const text = normalizeChatText(getField(obj, 'text', 'message', 'body', 'msg'))
+      if (text === null) return errReply(m, 'BAD_TEXT')
+      const from = auth.seat.name
+      const ts = Date.now()
+      const reply = okReply(m, { chat_ok: true, from, text, ts, code: roomCode, seat })
+      if (send) {
+        const frame: RoomReply = { m: 'chat', ok: true, code: roomCode, from, text, ts }
+        for (const s of auth.room.seats) {
+          try {
+            send(s.seat, frame)
+          } catch {
+            // a failing recipient never blocks the rest of the fan-out
+          }
+        }
+      }
+      return reply
+    }
+
+    if (m === 'emote') {
+      const raw = getField(obj, 'emote', 'emoji', 'text', 'message')
+      const text = normalizeChatText(raw)
+      if (text === null) return errReply(m, 'BAD_TEXT')
+      const from = auth.seat.name
+      const ts = Date.now()
+      const reply = okReply(m, { emote_ok: true, from, text, emote: text, ts, code: roomCode, seat })
+      if (send) {
+        const frame: RoomReply = { m: 'emote', ok: true, code: roomCode, from, text, emote: text, ts }
+        for (const s of auth.room.seats) {
+          try {
+            send(s.seat, frame)
+          } catch {
+            // a failing recipient never blocks the rest of the fan-out
+          }
+        }
+      }
+      return reply
+    }
 
     if (m === 'start_game') {
       if (seat !== 0) return errReply(m, 'NOT_HOST')

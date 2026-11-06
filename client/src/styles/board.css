@@ -132,3 +132,66 @@ body {
   .table-title { font-size: 1.05rem; }
   .table-actions button { padding: 0.5rem 1rem; }
 }
+
+/* Rack plus placement (issue #7): pending raise, selection glow, prov chip. */
+.tile { touch-action: none; }
+.tile.pending {
+  transform: translateY(-6px);
+  outline: 2px solid var(--brass-hot);
+  outline-offset: 1px;
+}
+.tile.selected {
+  outline: 2px solid var(--brass-hot);
+  outline-offset: 1px;
+  box-shadow: 0 0 0 3px rgba(232, 201, 122, 0.45), 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+.sq.drop-ok { outline: 2px dashed var(--brass-hot); outline-offset: -2px; }
+#prov-score {
+  display: inline-block;
+  padding: 0.3rem 0.9rem;
+  border-radius: 999px;
+  background: var(--wood-dark);
+  color: var(--brass-hot);
+  border: 1px solid var(--brass);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+#rack {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  align-items: end;
+  padding: 0.6rem 0.75rem;
+  min-height: 76px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(150deg, var(--wood) 0%, var(--wood-dark) 100%);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(232, 201, 122, 0.25);
+}
+#rack .tile {
+  width: 48px;
+  height: 60px;
+  flex: 0 0 auto;
+  cursor: grab;
+  user-select: none;
+  font-size: 1.35rem;
+}
+#rack-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+}
+#rack-actions button {
+  border: none;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  padding: 0.6rem 1.4rem;
+  font-family: var(--font-stack);
+  background: var(--brass);
+  color: var(--wood-dark);
+}
+
+@media (max-width: 480px) {
+  #rack { gap: 0.35rem; padding: 0.5rem; }
+  #rack .tile { width: 44px; height: 56px; font-size: 1.2rem; }
+  #rack-actions button { padding: 0.5rem 1rem; }
+}

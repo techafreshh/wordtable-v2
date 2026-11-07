@@ -3,6 +3,9 @@
 // Offline sends echo through `uiStore.sendChat`; online sends (issue #16)
 // ride `net.sendChat`/`net.sendEmote` and the broadcast repopulates the
 // log via handleFrame, so blank input shows nothing either way.
+// `reconnecting` counts as offline (issue #57): the socket is not open,
+// so those sends take the local-echo branch, and a closed-socket race on
+// the `online` branch falls back to local echo on NOT_CONNECTED.
 
 import { net, netStore } from '../store/net'
 import { uiStore, type ChatMessage } from '../store/ui'
@@ -44,15 +47,36 @@ export function buildChatPanelHTML(chat: ChatMessage[], open: boolean): string {
   )
 }
 
-// Online when the net store holds a seat and the socket is (re)connected.
+// Online only while the socket is open (issue #57): `reconnecting`
+// takes the synchronous offline branch below, so a send on a flaky
+// network echoes locally instead of dropping as NOT_CONNECTED.
 function isOnline(): boolean {
   try {
     const s = netStore.getState()
     if (typeof s.code !== 'string' || s.code === '') return false
     if (typeof s.token !== 'string' || s.token === '') return false
-    return s.status === 'online' || s.status === 'reconnecting'
+    return s.status === 'online'
   } catch {
     return false
+  }
+}
+
+// Replies that mean the frame never left the client: the text must still
+// land in the log via local echo instead of silently dropping.
+function isConnectionError(reply: { ok: boolean; error?: string }): boolean {
+  return (
+    !reply.ok &&
+    (reply.error === 'NOT_CONNECTED' || reply.error === 'DISCONNECTED')
+  )
+}
+
+// Local-echo preservation for the online race: never throws out of the
+// event handler, never surfaces a toast (the log entry is the surfacing).
+function preserveLocal(value: string): void {
+  try {
+    uiStore.getState().sendChat(value)
+  } catch {
+    // Best-effort like every other store touch in this file.
   }
 }
 
@@ -61,9 +85,19 @@ function sendInputText(root: HTMLElement): void {
   if (!input) return
   if (input.value.trim() === '') return
   if (isOnline()) {
-    // Fire-and-forget: the broadcast repopulates the log via handleFrame.
-    void net.sendChat(input.value)
+    // The broadcast repopulates the log via handleFrame on success; a
+    // closed-socket race resolves NOT_CONNECTED, so fall back to local
+    // echo and the text still lands in the log instead of dropping.
+    const value = input.value
     input.value = ''
+    void net.sendChat(value).then(
+      (reply) => {
+        if (isConnectionError(reply)) preserveLocal(value)
+      },
+      () => {
+        preserveLocal(value)
+      },
+    )
     return
   }
   if (uiStore.getState().sendChat(input.value)) input.value = ''
@@ -79,7 +113,14 @@ export function mountChatPanel(el: HTMLElement): void {
       const value = emote.getAttribute('data-emote') ?? ''
       if (value.trim() === '') return
       if (isOnline()) {
-        void net.sendEmote(value)
+        void net.sendEmote(value).then(
+          (reply) => {
+            if (isConnectionError(reply)) preserveLocal(value)
+          },
+          () => {
+            preserveLocal(value)
+          },
+        )
         return
       }
       uiStore.getState().sendChat(value)

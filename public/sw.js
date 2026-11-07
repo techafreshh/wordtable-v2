@@ -3,7 +3,7 @@
 // offline; runtime GETs are cache-first same-origin, navigations fall
 // back to the cached `/` shell. No push, no background sync (out of
 // scope for v0.1.0). Bump CACHE on every shell change.
-const CACHE = 'wordtable-v1'
+const CACHE = 'wordtable-v2'
 const PRECACHE = ['/', '/manifest.webmanifest']
 
 self.addEventListener('install', (event) => {
@@ -36,6 +36,18 @@ self.addEventListener('fetch', (event) => {
     return
   }
   if (url.origin !== self.location.origin) return
+  // Network-only bypass (issue #66): never runtime-cache API-ish GETs
+  // (`/health`, future `/api/*`, extensionless routes). Bare return lets
+  // the browser handle the request with default networking — no
+  // respondWith, no cache.put — so API responses are never served stale.
+  // Only file-extension asset requests reach the runtime branch below.
+  if (
+    url.pathname === '/health' ||
+    url.pathname.startsWith('/api/') ||
+    (url.pathname !== '/' && !url.pathname.split('/').pop().includes('.'))
+  ) {
+    return
+  }
   if (req.mode === 'navigate') {
     event.respondWith(
       fetch(req)

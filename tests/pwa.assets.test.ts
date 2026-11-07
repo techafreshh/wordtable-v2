@@ -92,9 +92,56 @@ describe('index.html PWA links', () => {
 describe('service worker', () => {
   it('ships version and precache markers', () => {
     const sw = readBytes('public/sw.js').toString('utf8')
-    expect(sw).toContain('wordtable-v1')
+    expect(sw).toContain('wordtable-v2')
     expect(sw).toContain('skipWaiting')
     expect(sw).toContain('/manifest.webmanifest')
     expect(sw).toContain('clients.claim')
+  })
+
+  it('bypasses API-ish GETs without runtime caching (issue #66)', () => {
+    const sw = readBytes('public/sw.js').toString('utf8')
+    // Bypass guard code markers: /health arm + /api/ prefix arm +
+    // extensionless arm (last-segment `.` check). Anchored to guard code
+    // (not comments) so deleting any arm fails this test.
+    expect(sw).toContain("url.pathname === '/health'")
+    expect(sw).toContain("startsWith('/api/')")
+    expect(sw).toContain("split('/').pop()")
+    expect(sw).toContain("includes('.')")
+    // Asset runtime path stays intact.
+    expect(sw).toContain('caches.match')
+    expect(sw).toContain('cache.put(req')
+    // The bypass guard must appear before the navigate branch so API-ish
+    // GETs fall through with a bare return (no respondWith / cache.put).
+    const bypassIndex = sw.indexOf("startsWith('/api/')")
+    const navigateIndex = sw.indexOf("req.mode === 'navigate'")
+    expect(bypassIndex).toBeGreaterThanOrEqual(0)
+    expect(navigateIndex).toBeGreaterThan(bypassIndex)
+  })
+
+  it('bypass predicate: API-ish bypasses, assets stay cacheable', () => {
+    // Mirrors the URL-shape rule in public/sw.js (issue #66):
+    // `/health`, `/api/*`, or extensionless (no `.` in last segment,
+    // excluding `/`) bypass the runtime cache; file-extension assets do not.
+    function shouldBypass(pathname: string): boolean {
+      return (
+        pathname === '/health' ||
+        pathname.startsWith('/api/') ||
+        (pathname !== '/' && !(pathname.split('/').pop() ?? '').includes('.'))
+      )
+    }
+    // API-ish cases must bypass (query strings never reach pathname).
+    expect(shouldBypass('/health')).toBe(true)
+    expect(shouldBypass(new URL('/health?x=1', 'https://example.test').pathname)).toBe(
+      true,
+    )
+    expect(shouldBypass('/api/rooms')).toBe(true)
+    expect(shouldBypass('/api/x')).toBe(true)
+    // Asset cases must stay cacheable.
+    expect(shouldBypass('/assets/app-abc123.js')).toBe(false)
+    expect(shouldBypass('/icon-192.png')).toBe(false)
+    expect(shouldBypass('/sounds/thunk.wav')).toBe(false)
+    expect(shouldBypass('/manifest.webmanifest')).toBe(false)
+    // `/` stays navigation-handled, never runtime-matched.
+    expect(shouldBypass('/')).toBe(false)
   })
 })

@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "server": "tsx server/src/ws.ts",
     "server:build": "tsc -p server/tsconfig.json",
+    "soak": "tsx tests/soak.ts",
     "test": "vitest run --root .",
     "test:watch": "vitest",
     "serve:e2e": "tsx server/src/ws.ts --port 4101",

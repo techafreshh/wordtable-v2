@@ -648,23 +648,17 @@ export const net = {
     if (auth === null) return Promise.resolve({ ok: false, error: 'NO_ROOM' })
     return sendRequest({ v: 1, m: 'rejoin', ...auth }).then((reply) => {
       if (!reply.ok) return reply
-      // Reclaim refreshes the in-memory seat: after a tab reload only
-      // persisted creds exist, and later intents read memory first.
-      const code =
-        typeof reply['code'] === 'string' && reply['code'] !== ''
-          ? reply['code']
-          : auth.code
-      const token =
-        typeof reply['token'] === 'string' && reply['token'] !== ''
-          ? reply['token']
-          : auth.token
-      netStore.setState({
-        code,
-        token,
-        seat: seatOf(reply) ?? netStore.getState().seat ?? 0,
+      // Reclaim refreshes the in-memory seat through the shared accept
+      // path: after a tab reload only persisted creds exist, and later
+      // intents read memory first. Reply creds win, `auth` fills gaps.
+      const accepted = adoptSeat({
+        ...reply,
+        code: reply['code'] ?? auth.code,
+        token: reply['token'] ?? auth.token,
       })
+      if (!accepted.ok) return accepted
       handleFrame({ ...reply, m: 'state_sync' })
-      return reply
+      return accepted
     })
   },
 

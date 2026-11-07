@@ -443,6 +443,109 @@ describe('tab-reload resume', () => {
     expect(uiStore.getState().turn).toBe(2)
   })
 
+  it('empty-memory persisted-creds rejoin hydrates store, storage, and board', async () => {
+    const sock = await connected()
+    expect(netStore.getState().code).toBeNull()
+    expect(netStore.getState().token).toBeNull()
+    localStorage.setItem(NET_CODE_KEY, 'ABCD')
+    localStorage.setItem(NET_TOKEN_KEY, 'token-0123456789')
+    const pending = net.rejoin()
+    await waitFor(() => sock.sent.length >= 1, 3000, 'rejoin payload')
+    const payload = JSON.parse(sock.sent[0] ?? '{}') as Record<string, unknown>
+    expect(payload).toMatchObject({
+      v: 1,
+      m: 'rejoin',
+      code: 'ABCD',
+      token: 'token-0123456789',
+    })
+    // Non-canonical reply code proves the shared accept path normalizes.
+    sock.receive({
+      m: 'rejoin',
+      ok: true,
+      code: ' abcd ',
+      token: 'token-0123456789',
+      seat: 1,
+      you: 1,
+      turn: 1,
+      scores: [10, 4],
+      board_tiles: [{ square: 'H8', letter: 'A', blank: false }],
+      rack: [],
+    })
+    await expect(pending).resolves.toMatchObject({ ok: true })
+    expect(netStore.getState().code).toBe('ABCD')
+    expect(netStore.getState().token).toBe('token-0123456789')
+    expect(netStore.getState().seat).toBe(1)
+    expect(localStorage.getItem(NET_CODE_KEY)).toBe('ABCD')
+    expect(localStorage.getItem(NET_TOKEN_KEY)).toBe('token-0123456789')
+    expect(uiStore.getState().scores).toEqual([10, 4, 0, 0])
+    expect(uiStore.getState().turn).toBe(1)
+    expect(Object.keys(boardToTiles(gameStore.getState().board))).toHaveLength(1)
+  })
+
+  it('rotated token from the rejoin reply refreshes persisted storage', async () => {
+    const sock = await connected()
+    localStorage.setItem(NET_CODE_KEY, 'ABCD')
+    localStorage.setItem(NET_TOKEN_KEY, 'token-old-0123456789')
+    const pending = net.rejoin()
+    await waitFor(() => sock.sent.length >= 1, 3000, 'rejoin payload')
+    sock.receive({
+      m: 'rejoin',
+      ok: true,
+      code: 'ABCD',
+      token: 'token-new-9876543210',
+      seat: 0,
+      you: 0,
+      turn: 0,
+      scores: [0, 0],
+      board_tiles: [],
+      rack: [],
+    })
+    await expect(pending).resolves.toMatchObject({
+      ok: true,
+      token: 'token-new-9876543210',
+    })
+    expect(netStore.getState().code).toBe('ABCD')
+    expect(netStore.getState().token).toBe('token-new-9876543210')
+    expect(localStorage.getItem(NET_CODE_KEY)).toBe('ABCD')
+    expect(localStorage.getItem(NET_TOKEN_KEY)).toBe('token-new-9876543210')
+  })
+
+  it('malformed rejoin reply resolves BAD_REPLY without mutation', async () => {
+    const sock = await connected()
+    localStorage.setItem(NET_CODE_KEY, 'ABCD')
+    localStorage.setItem(NET_TOKEN_KEY, 'token-0123456789')
+    const beforeBoard = JSON.stringify(
+      boardToTiles(gameStore.getState().board),
+    )
+    const beforeScores = [...uiStore.getState().scores]
+    const beforeTurn = uiStore.getState().turn
+    const pending = net.rejoin()
+    await waitFor(() => sock.sent.length >= 1, 3000, 'rejoin payload')
+    sock.receive({
+      m: 'rejoin',
+      ok: true,
+      code: 'BAD!',
+      token: 'short',
+      seat: 0,
+      you: 0,
+      turn: 5,
+      scores: [99, 99],
+      board_tiles: [{ square: 'H8', letter: 'Z', blank: false }],
+      rack: [],
+    })
+    await expect(pending).resolves.toEqual({ ok: false, error: 'BAD_REPLY' })
+    expect(netStore.getState().code).toBeNull()
+    expect(netStore.getState().token).toBeNull()
+    expect(netStore.getState().seat).toBeNull()
+    expect(localStorage.getItem(NET_CODE_KEY)).toBe('ABCD')
+    expect(localStorage.getItem(NET_TOKEN_KEY)).toBe('token-0123456789')
+    expect(JSON.stringify(boardToTiles(gameStore.getState().board))).toBe(
+      beforeBoard,
+    )
+    expect(uiStore.getState().scores).toEqual(beforeScores)
+    expect(uiStore.getState().turn).toBe(beforeTurn)
+  })
+
   it('overlay subscriber repaints on reconnecting status', async () => {
     // Fake-DOM mount: proves the store subscription path (the path the
     // real browser node uses) flips copy without the direct painter.

@@ -100,15 +100,19 @@ describe('service worker', () => {
 
   it('bypasses API-ish GETs without runtime caching (issue #66)', () => {
     const sw = readBytes('public/sw.js').toString('utf8')
-    // Bypass markers: /health + /api/ prefix + extensionless rule.
-    expect(sw).toContain('/health')
-    expect(sw).toContain('/api/')
+    // Bypass guard code markers: /health arm + /api/ prefix arm +
+    // extensionless arm (last-segment `.` check). Anchored to guard code
+    // (not comments) so deleting any arm fails this test.
+    expect(sw).toContain("url.pathname === '/health'")
+    expect(sw).toContain("startsWith('/api/')")
+    expect(sw).toContain("split('/').pop()")
+    expect(sw).toContain("includes('.')")
     // Asset runtime path stays intact.
     expect(sw).toContain('caches.match')
     expect(sw).toContain('cache.put(req')
     // The bypass guard must appear before the navigate branch so API-ish
     // GETs fall through with a bare return (no respondWith / cache.put).
-    const bypassIndex = sw.indexOf('/health')
+    const bypassIndex = sw.indexOf("startsWith('/api/')")
     const navigateIndex = sw.indexOf("req.mode === 'navigate'")
     expect(bypassIndex).toBeGreaterThanOrEqual(0)
     expect(navigateIndex).toBeGreaterThan(bypassIndex)

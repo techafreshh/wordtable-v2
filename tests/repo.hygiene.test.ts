@@ -12,6 +12,9 @@ const VITEST_CONFIG = new URL('../vitest.config.ts', import.meta.url)
 const SCAN_ROOTS = ['client', 'server', 'shared', 'tests']
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'dist-server', '.git'])
 const ARTIFACT_RE = /\.(js|d\.ts|tsbuildinfo)$/
+// Issue #40: gitignored `*.test.js` doubles beside `*.test.ts` originals
+// would double-collect every client suite, so shadow doubles get their own matcher.
+const SHADOW_RE = /\.test\.js$/
 
 function walk(relativeDir: string, out: string[]): void {
   const dirUrl = new URL(`${relativeDir}/`, REPO_ROOT)
@@ -29,6 +32,22 @@ function walk(relativeDir: string, out: string[]): void {
 
 function read(url: URL): string {
   return readFileSync(url, 'utf8')
+}
+
+// Issue #40: mirrors `walk` exactly (same skip set, no fixture
+// special-casing) but matches only `*.test.js` shadow doubles.
+function walkShadows(relativeDir: string, out: string[]): void {
+  const dirUrl = new URL(`${relativeDir}/`, REPO_ROOT)
+  for (const entry of readdirSync(dirUrl)) {
+    if (SKIP_DIRS.has(entry)) continue
+    const entryUrl = new URL(`${relativeDir}/${entry}`, REPO_ROOT)
+    const st = statSync(entryUrl)
+    if (st.isDirectory()) {
+      walkShadows(`${relativeDir}/${entry}`, out)
+    } else if (SHADOW_RE.test(entry)) {
+      out.push(`${relativeDir}/${entry}`)
+    }
+  }
 }
 
 describe('repo hygiene: no tsc-emitted artifacts beside sources', () => {
@@ -61,5 +80,29 @@ describe('repo hygiene: no tsc-emitted artifacts beside sources', () => {
     const config = read(VITEST_CONFIG)
     expect(config).toContain('tests/**/*.test.ts')
     expect(config).toContain('dist-server')
+  })
+})
+
+describe('test duplication: each suite executes exactly once (issue #40)', () => {
+  it('has zero *.test.js shadows under tests/', () => {
+    const shadows: string[] = []
+    walkShadows('tests', shadows)
+    expect(shadows).toEqual([])
+  })
+
+  it('keeps the vitest include array TS-only', () => {
+    // Scoped to the include array on purpose: comments elsewhere in
+    // vitest.config.ts legitimately name `*.test.js` (the stray-emission
+    // guard), so a whole-file `not.toContain` would fail on a clean tree.
+    const config = read(VITEST_CONFIG)
+    const match = config.match(/include:\s*\[([\s\S]*?)\]/)
+    expect(match).not.toBeNull()
+    const block = match?.[1] ?? ''
+    const entries = [...block.matchAll(/['"]([^'"]+)['"]/g)].map((m) => m[1])
+    expect(entries.length).toBeGreaterThan(0)
+    for (const entry of entries) {
+      expect(entry.endsWith('.test.ts')).toBe(true)
+      expect(entry).not.toContain('.js')
+    }
   })
 })

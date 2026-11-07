@@ -41,21 +41,36 @@ const MIME: Record<string, string> = {
   '.js': 'text/javascript',
   '.css': 'text/css',
   '.json': 'application/json',
+  '.webmanifest': 'application/manifest+json',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.ico': 'image/x-icon',
 }
 
 export function resolveStaticRoot(): string {
+  // Layout-agnostic (issue #21): the bundled server runs as
+  // `dist/server.js` (module dir `dist/`), the dev server as
+  // `server/src/ws.ts` (module dir `server/src/`). Probe
+  // bundled-first, then dev paths; the first dir holding an
+  // `index.html` wins so `node dist/server.js` and
+  // `tsx server/src/ws.ts` serve `/` and `/health` identically.
   const here = dirname(fileURLToPath(import.meta.url))
-  const repoRoot = resolve(here, '../..')
-  const built = join(repoRoot, 'dist/client')
-  try {
-    if (existsSync(join(built, 'index.html'))) return built
-  } catch {
-    // fall through to source dir
+  const candidates = [
+    join(here, 'client'),
+    join(resolve(here, '..'), 'dist/client'),
+    join(resolve(here, '../..'), 'dist/client'),
+    join(resolve(here, '../..'), 'client'),
+    join(process.cwd(), 'dist/client'),
+    join(process.cwd(), 'client'),
+  ]
+  for (const dir of candidates) {
+    try {
+      if (existsSync(join(dir, 'index.html'))) return dir
+    } catch {
+      // try the next candidate
+    }
   }
-  return join(repoRoot, 'client')
+  return join(resolve(here, '../..'), 'client')
 }
 
 function serveFile(res: ServerResponse, filePath: string, contentType: string): void {
@@ -183,11 +198,24 @@ function getField(obj: RoomReply, ...names: string[]): unknown {
 
 function loadLexiconSync(): Lexicon | null {
   try {
+    // Same bundled/dev split as resolveStaticRoot: probe every
+    // plausible repo-root layout before giving up on word checks.
     const here = dirname(fileURLToPath(import.meta.url))
-    const repoRoot = resolve(here, '../..')
-    for (const candidate of ['dictionaries/sowpods.txt', 'assets/sowpods.txt']) {
+    const roots = [
+      resolve(here, '..'),
+      resolve(here, '../..'),
+      process.cwd(),
+    ]
+    const candidates: string[] = []
+    for (const root of roots) {
+      candidates.push(join(root, 'dictionaries/sowpods.txt'))
+    }
+    for (const root of roots) {
+      candidates.push(join(root, 'assets/sowpods.txt'))
+    }
+    for (const candidate of candidates) {
       try {
-        const text = readFileSync(join(repoRoot, candidate), 'utf8')
+        const text = readFileSync(candidate, 'utf8')
         const words = new Set<string>()
         for (const line of text.split(/\r?\n/)) {
           const w = line.trim().toUpperCase()

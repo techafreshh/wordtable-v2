@@ -15,7 +15,7 @@
     "soak": "tsx tests/soak.ts",
     "test": "vitest run --root .",
     "test:watch": "vitest",
-    "serve:e2e": "tsx server/src/ws.ts --port 4101",
+    "serve:e2e": "node dist/server.js --port 4101",
     "test:e2e": "npm run build && WORDTABLE_DEBUG=1 tsx tests/e2e/ws-probe.mts && npx playwright test",
     "typecheck": "tsc -b",
     "lint": "tsc -b --noEmit"

@@ -11,6 +11,7 @@ import {
   type Placement,
 } from './rules'
 import type { Tile } from './bag'
+import { truncateChatText } from './chat-text'
 
 // One tile the player commits to a square. `square` accepts `H8` algebra
 // (letter- or digit-first, case-tolerant) or raw `{row, col}` coordinates.
@@ -270,7 +271,7 @@ export class LocalGame {
     const message: ChatMessage = {
       seat,
       from: this.names[seat],
-      text: trimmed.slice(0, 200),
+      text: truncateChatText(trimmed),
       ts: Date.now(),
     }
     this.chatLog.push(message)

@@ -6,6 +6,7 @@ import type { Lexicon } from '../../shared/engine/rules.js'
 import { parseSquare, toAlgebra } from '../../shared/engine/board.js'
 import type { Tile } from '../../shared/engine/bag.js'
 import { generateBotMove } from '../../shared/engine/bot.js'
+import { truncateChatText } from '../../shared/engine/chat-text.js'
 import { BOT_NAME, botThinkDelayMs } from './bot-seat.js'
 import {
   RoomRegistry,
@@ -108,7 +109,7 @@ const STILL_UNBOUND = new Set(['rematch'])
 // to 200 chars. Long input truncates — it is never rejected.
 function normalizeChatText(raw: unknown): string | null {
   if (typeof raw !== 'string') return null
-  const text = raw.trim().slice(0, 200)
+  const text = truncateChatText(raw.trim())
   return text === '' ? null : text
 }
 

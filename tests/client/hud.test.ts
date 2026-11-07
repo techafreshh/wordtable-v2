@@ -131,6 +131,22 @@ describe('Chat bubble and panel', () => {
     expect(uiStore.getState().chat[0]?.text).toHaveLength(200)
   })
 
+  it('sendChat never splits a surrogate pair on an emoji run', () => {
+    expect(uiStore.getState().sendChat('😀'.repeat(250))).toBe(true)
+    const text = uiStore.getState().chat[0]?.text ?? ''
+    expect(Array.from(text)).toHaveLength(200)
+    expect(text).toBe('😀'.repeat(200))
+  })
+
+  it('receiveChat truncates emoji runs without lone surrogates and bumps the badge', () => {
+    expect(uiStore.getState().receiveChat('Rival 1', '😀'.repeat(250))).toBe(true)
+    const text = uiStore.getState().chat[0]?.text ?? ''
+    expect(Array.from(text)).toHaveLength(200)
+    expect(text).toBe('😀'.repeat(200))
+    expect(text).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/)
+    expect(uiStore.getState().unread).toBe(1)
+  })
+
   it('receiveChat while closed bumps the badge; opening clears it', () => {
     expect(uiStore.getState().receiveChat('Rival 1', 'hi')).toBe(true)
     expect(uiStore.getState().unread).toBe(1)

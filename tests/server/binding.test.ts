@@ -264,6 +264,35 @@ describe('binding chat and emotes (issue #16)', () => {
     }
   })
 
+  it('never splits a surrogate pair when truncating an emoji run (chat)', () => {
+    const { binding, sent, code, t0 } = lobbyTwoSeats()
+    sent.length = 0
+    const reply = binding.handleMessage({ v: 1, m: 'chat', code, token: t0, text: '😀'.repeat(250) })
+    expect(reply['ok']).toBe(true)
+    const text = String(reply['text'])
+    expect(Array.from(text)).toHaveLength(200)
+    expect(text).toBe('😀'.repeat(200))
+    expect(text).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/)
+    expect(sent).toHaveLength(2)
+    for (const s of sent) {
+      expect(String(s.frame['text'])).toBe(text)
+      expect(Array.from(String(s.frame['text']))).toHaveLength(200)
+    }
+  })
+
+  it('never splits a surrogate pair when truncating an emoji run (emote)', () => {
+    const { binding, sent, code, t0 } = lobbyTwoSeats()
+    sent.length = 0
+    const reply = binding.handleMessage({ v: 1, m: 'emote', code, token: t0, emote: '😀'.repeat(250) })
+    expect(reply['ok']).toBe(true)
+    const text = String(reply['text'])
+    expect(Array.from(text)).toHaveLength(200)
+    expect(text).toBe('😀'.repeat(200))
+    expect(reply['emote']).toBe(text)
+    expect(sent).toHaveLength(2)
+    for (const s of sent) expect(String(s.frame['text'])).toBe(text)
+  })
+
   it('fans out lobby chat before start_game identically to table chat', () => {
     const { binding, sent, code, t0, t1 } = lobbyTwoSeats()
     sent.length = 0

@@ -5,6 +5,9 @@ const REPO_ROOT = new URL('../', import.meta.url)
 const GITIGNORE = new URL('../.gitignore', import.meta.url)
 const TESTS_TSCONFIG = new URL('./tsconfig.json', import.meta.url)
 const SHARED_TSCONFIG = new URL('../shared/tsconfig.json', import.meta.url)
+const SERVER_TSCONFIG = new URL('../server/tsconfig.json', import.meta.url)
+const CLIENT_TSCONFIG = new URL('../client/tsconfig.json', import.meta.url)
+const VITEST_CONFIG = new URL('../vitest.config.ts', import.meta.url)
 
 const SCAN_ROOTS = ['client', 'server', 'shared', 'tests']
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'dist-server', '.git'])
@@ -46,7 +49,17 @@ describe('repo hygiene: no tsc-emitted artifacts beside sources', () => {
   it('pins noEmit in tests/ and shared/ tsconfigs', () => {
     const tests = JSON.parse(read(TESTS_TSCONFIG)) as { compilerOptions?: Record<string, unknown> }
     const shared = JSON.parse(read(SHARED_TSCONFIG)) as { compilerOptions?: Record<string, unknown> }
+    const server = JSON.parse(read(SERVER_TSCONFIG)) as { compilerOptions?: Record<string, unknown> }
+    const client = JSON.parse(read(CLIENT_TSCONFIG)) as { compilerOptions?: Record<string, unknown> }
     expect(tests.compilerOptions?.['noEmit']).toBe(true)
     expect(shared.compilerOptions?.['noEmit']).toBe(true)
+    expect(server.compilerOptions?.['noEmit']).toBe(true)
+    expect(client.compilerOptions?.['noEmit']).toBe(true)
+  })
+
+  it('scopes vitest to TS-only test globs', () => {
+    const config = read(VITEST_CONFIG)
+    expect(config).toContain('tests/**/*.test.ts')
+    expect(config).toContain('dist-server')
   })
 })

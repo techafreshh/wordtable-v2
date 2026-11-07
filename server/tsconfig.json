@@ -7,6 +7,7 @@
     "moduleResolution": "bundler",
     "isolatedModules": true,
     "moduleDetection": "force",
+    "noEmit": true,
     "outDir": "../dist-server",
     "rootDir": "..",
     "strict": true,

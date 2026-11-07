@@ -385,4 +385,15 @@ describe('LocalGame roster sync', () => {
     expect(state.bagRemaining).toBe(before - 7)
     expect(state.turn).toBe(1)
   })
+
+  it('refused removeSeat leaves names and engine in sync', () => {
+    const game = new LocalGame(['A', 'B'])
+    game.removeSeat(0)
+    expect(game.getState().names).toEqual(['B'])
+    expect(() => game.removeSeat(0)).toThrow('cannot remove the last player')
+    const state = game.getState()
+    expect(state.names.length).toBe(1)
+    expect(state.scores.length).toBe(1)
+    expect(state.racks.length).toBe(1)
+  })
 })

@@ -310,16 +310,18 @@ export class LocalGame {
     if (!this.validSeat(index)) {
       throw new RangeError(`LocalGame: seat index out of range: ${index}`)
     }
-    this.names.splice(index, 1)
     this.game.removePlayer(index)
+    this.names.splice(index, 1)
   }
 
   // Mid-game re-seat: appends like the constructor (16-char truncation
   // plus a fresh engine rack) without disturbing the current turn.
   // Returns the new seat index.
   addSeat(name: string): number {
-    this.names.push(String(name).slice(0, 16))
-    return this.game.addPlayer()
+    const truncated = String(name).slice(0, 16)
+    const seatedAt = this.game.addPlayer()
+    this.names.push(truncated)
+    return seatedAt
   }
 
   getState(): LocalSnapshot {

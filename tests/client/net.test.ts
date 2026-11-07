@@ -448,6 +448,70 @@ describe('state_sync projection', () => {
     expect((html.match(/class="tile committed"/g) ?? []).length).toBe(5)
   })
 
+  it('syncs 2-player seats before scores so scores stay unpadded', () => {
+    expect(uiStore.getState().seats).toHaveLength(4)
+    handleFrame({
+      m: 'state_sync',
+      ok: true,
+      turn: 1,
+      scores: [10, 4],
+      seats: 2,
+      seats_info: [
+        { seat: 0, name: 'Ann', is_bot: false },
+        { seat: 1, name: 'Bo', is_bot: false },
+      ],
+      board_tiles: [],
+      rack: [],
+    })
+    expect(uiStore.getState().seats).toEqual(['Ann', 'Bo'])
+    expect(uiStore.getState().scores).toEqual([10, 4])
+    expect(uiStore.getState().turn).toBe(1)
+  })
+
+  it('orders seats by seat index and picks up true names', () => {
+    uiStore.getState().setSeats(['You', 'Rival 1'])
+    handleFrame({
+      m: 'state_sync',
+      ok: true,
+      turn: 2,
+      scores: [7, 3, 12],
+      seats: 3,
+      seats_info: [
+        { seat: 1, name: 'Bo', is_bot: false },
+        { seat: 2, name: 'Cy-bot', is_bot: true },
+        { seat: 0, name: 'Ann', is_bot: false },
+      ],
+      board_tiles: [],
+      rack: [],
+    })
+    expect(uiStore.getState().seats).toEqual(['Ann', 'Bo', 'Cy-bot'])
+    expect(uiStore.getState().scores).toEqual([7, 3, 12])
+    expect(uiStore.getState().turn).toBe(2)
+  })
+
+  it('leaves seats and scores untouched when seats_info is malformed', () => {
+    uiStore.getState().setSeats(['You', 'Rival 1'])
+    uiStore.getState().setScores([5, 6])
+    const badFrames: Array<Record<string, unknown>> = [
+      { m: 'state_sync', turn: 1, scores: [5, 6], board_tiles: [], rack: [] },
+      { m: 'state_sync', turn: 1, scores: [5, 6], seats_info: [], board_tiles: [], rack: [] },
+      { m: 'state_sync', turn: 1, scores: [5, 6], seats_info: 'Ann', board_tiles: [], rack: [] },
+      {
+        m: 'state_sync',
+        turn: 1,
+        scores: [5, 6],
+        seats_info: [{ seat: 0 }, { seat: 1, name: '  ' }, { seat: 2, name: 42 }],
+        board_tiles: [],
+        rack: [],
+      },
+    ]
+    for (const frame of badFrames) {
+      expect(() => handleFrame(frame)).not.toThrow()
+      expect(uiStore.getState().seats).toEqual(['You', 'Rival 1'])
+      expect(uiStore.getState().scores).toEqual([5, 6])
+    }
+  })
+
   it('routes chat through receiveChat and ignores unknown frames', () => {
     expect(uiStore.getState().chat).toHaveLength(0)
     handleFrame({ m: 'chat', from: 'Rival 1', text: 'gl hf' })

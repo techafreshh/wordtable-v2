@@ -85,6 +85,32 @@ describe('Tap placement', () => {
     expect(gameStore.getState().designateBlank(99999, 'Z')).toBe(false)
   })
 
+  it('hook pending face matches DOM data-tile after Z designation', () => {
+    gameStore.getState().setRack(['?', 'A', 'B'])
+    expect(gameStore.getState().placeTileAs(0, 'H8', 'Z')).toBe(true)
+    const state = gameStore.getState()
+    // getState() projects pending faces through displayFace, so the hook
+    // reports the designated letter the DOM shows.
+    expect(displayFace(state.pending[0])).toBe('Z')
+    const html = buildBoardHTMLWithPending({}, state.pending)
+    expect(html).toContain('data-tile="Z"')
+  })
+
+  it('late designation and undesignated blanks match hook and DOM', () => {
+    gameStore.getState().setRack(['?', 'A', 'B'])
+    expect(gameStore.getState().placeTile(0, 'H8')).toBe(true)
+    // Undesignated blank still reports '?' in both hook and DOM.
+    expect(displayFace(gameStore.getState().pending[0])).toBe('?')
+    expect(buildBoardHTMLWithPending({}, gameStore.getState().pending)).toContain(
+      'data-tile="?"',
+    )
+    const id = gameStore.getState().pending[0].id
+    expect(gameStore.getState().designateBlank(id, 'Z')).toBe(true)
+    const state = gameStore.getState()
+    expect(displayFace(state.pending[0])).toBe('Z')
+    expect(buildBoardHTMLWithPending({}, state.pending)).toContain('data-tile="Z"')
+  })
+
   it('placeTileAs rejects garbage letters and non-blanks with letters', () => {
     gameStore.getState().setRack(['?', 'A'])
     expect(gameStore.getState().placeTileAs(0, 'H8', '?')).toBe(false)

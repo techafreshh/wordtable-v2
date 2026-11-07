@@ -35,7 +35,7 @@ import { buildRecapHTML, mountRecap } from './components/Recap'
 import { buildToastHTML, mountToast } from './components/Toast'
 import { ensureReconnectOverlay } from './components/ReconnectOverlay'
 import { mountTable, renderTable, tableSkeletonHTML } from './components/Table'
-import { gameStore, provScoreText } from './store/game'
+import { gameStore, displayFace, provScoreText } from './store/game'
 import { DEFAULT_SEAT_NAMES, uiStore } from './store/ui'
 import { sessionStore } from './store/session'
 import {
@@ -358,7 +358,7 @@ function installHook(): void {
       return {
         rack: state.rack.map((t) => (t.isBlank ? '?' : t.face)),
         rackCount: state.rack.length,
-        pending: state.pending.map((p) => ({ sq: p.sq, face: p.isBlank ? '?' : p.face })),
+        pending: state.pending.map((p) => ({ sq: p.sq, face: displayFace(p) })),
         pendingCount: state.pending.length,
         provScore: state.provScore,
         provWords: [...state.provWords],

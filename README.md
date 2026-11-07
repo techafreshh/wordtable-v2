@@ -27,7 +27,7 @@ Offline "Play now" needs no server. Online rooms: open the client with
 ## Deploy (production)
 
 ```sh
-npm run build      # tsc + client bundle + dist/server.js
+npm run build      # clean dist/ + tsc + client bundle + dist/server.js
 npm run serve      # node dist/server.js (PORT honored, default 9080)
 curl -s http://localhost:9080/health   # {"ok":true}
 ```
@@ -41,7 +41,8 @@ Full checklist (systemd, Cloudflare Tunnel `wss`, env knobs, tag): see
 |---|---|
 | `npm run dev` | Vite client + `tsx` server together |
 | `npm run server` | Dev server via `tsx server/src/ws.ts` |
-| `npm run build` | Typecheck, client bundle, server bundle (`dist/server.js`) |
+| `npm run build` | Clean `dist/`, typecheck, client bundle, server bundle (`dist/server.js`) |
+| `npm run clean` | Empty `dist/` (runs first in `npm run build`) |
 | `npm run serve` | Production server: `node dist/server.js` |
 | `npm run server:build` | Server bundle only (`vite.server.config.ts`) |
 | `npm run check-bundle` | Fail unless shipped JS is <800 KiB gzip |

@@ -1,5 +1,6 @@
 // Playwright e2e (issue #19) — phone-viewport walks against the
-// single-port server (`npm run serve:e2e` on :4101): an offline tap-tap
+// release artifact (single-port server `node dist/server.js --port 4101`
+// via `npm run serve:e2e` on :4101): an offline tap-tap
 // commit plus an online reload-resume across two browser contexts.
 import { defineConfig } from '@playwright/test'
 

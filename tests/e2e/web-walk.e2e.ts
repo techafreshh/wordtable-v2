@@ -1,5 +1,6 @@
 // Web walk (issue #19, hardened issue #21) — phone-viewport browser proofs
-// against the single-port server (`npm run serve:e2e` on :4101): an offline
+// against the release artifact (bundled single-port server
+// `node dist/server.js --port 4101` via `npm run serve:e2e` on :4101): an offline
 // tap-tap commit (rack → squares → Play), an online two-context
 // reload-resume (create → join → start → place → reload → same turn,
 // committed tiles restored), the offline Start → setup → lobby → table →

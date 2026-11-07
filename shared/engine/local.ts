@@ -303,6 +303,25 @@ export class LocalGame {
     }
   }
 
+  // Mid-game roster sync (mirrors RoomRegistry seat order): splice the
+  // name lineup and delegate to Game. Applies in PLAYING and ENDED so
+  // snapshots stay consistent.
+  removeSeat(index: number): void {
+    if (!this.validSeat(index)) {
+      throw new RangeError(`LocalGame: seat index out of range: ${index}`)
+    }
+    this.names.splice(index, 1)
+    this.game.removePlayer(index)
+  }
+
+  // Mid-game re-seat: appends like the constructor (16-char truncation
+  // plus a fresh engine rack) without disturbing the current turn.
+  // Returns the new seat index.
+  addSeat(name: string): number {
+    this.names.push(String(name).slice(0, 16))
+    return this.game.addPlayer()
+  }
+
   getState(): LocalSnapshot {
     return {
       names: [...this.names],

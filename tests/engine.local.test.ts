@@ -322,3 +322,67 @@ describe('LocalGame facade', () => {
     ).toBeGreaterThanOrEqual(10)
   }, 30000)
 })
+
+describe('LocalGame roster sync', () => {
+  it('removeSeat before the turn shifts the turn down', () => {
+    const game = new LocalGame(['A', 'B', 'C'])
+    game.pass(0)
+    expect(game.getState().turn).toBe(1)
+    game.removeSeat(0)
+    const state = game.getState()
+    expect(state.names).toEqual(['B', 'C'])
+    expect(state.turn).toBe(0)
+    expect(state.scores.length).toBe(2)
+    expect(state.racks.length).toBe(2)
+  })
+
+  it('removeSeat at the turn passes to the next occupant', () => {
+    const game = new LocalGame(['A', 'B', 'C'])
+    game.pass(0)
+    expect(game.getState().turn).toBe(1)
+    game.removeSeat(1)
+    const state = game.getState()
+    expect(state.names).toEqual(['A', 'C'])
+    // 1 % 2: the seat after the removed player now holds the turn.
+    expect(state.turn).toBe(1)
+    expect(state.scores.length).toBe(2)
+    expect(state.racks.length).toBe(2)
+  })
+
+  it('removeSeat after the turn leaves the turn alone', () => {
+    const game = new LocalGame(['A', 'B', 'C'])
+    expect(game.getState().turn).toBe(0)
+    game.removeSeat(2)
+    const state = game.getState()
+    expect(state.names).toEqual(['A', 'B'])
+    expect(state.turn).toBe(0)
+    expect(state.scores.length).toBe(2)
+    expect(state.racks.length).toBe(2)
+  })
+
+  it('removeSeat of the last seat wraps the turn to zero', () => {
+    const game = new LocalGame(['A', 'B'])
+    game.pass(0)
+    expect(game.getState().turn).toBe(1)
+    game.removeSeat(1)
+    const state = game.getState()
+    expect(state.names).toEqual(['A'])
+    expect(state.turn).toBe(0)
+  })
+
+  it('addSeat truncates the name, deals a rack and keeps the turn', () => {
+    const game = new LocalGame(['A', 'B'])
+    game.pass(0)
+    expect(game.getState().turn).toBe(1)
+    const before = game.game.bagRemaining()
+    const seatedAt = game.addSeat('0123456789abcdefGHI')
+    expect(seatedAt).toBe(2)
+    const state = game.getState()
+    expect(state.names).toEqual(['A', 'B', '0123456789abcdef'])
+    expect(state.scores.length).toBe(3)
+    expect(state.racks.length).toBe(3)
+    expect(state.racks[2].length).toBe(7)
+    expect(state.bagRemaining).toBe(before - 7)
+    expect(state.turn).toBe(1)
+  })
+})

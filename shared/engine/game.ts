@@ -18,7 +18,7 @@ export enum GameEndReason {
 export type GameActionResult = { ok: true } | { ok: false; reason: string }
 
 export class Game {
-  readonly numPlayers: number
+  numPlayers: number
   private seed: number
   private _bag: TileBag
   status: GameStatus = GameStatus.PLAYING
@@ -110,6 +110,36 @@ export class Game {
   rematch(): void {
     this._bag = new TileBag(this.seed)
     this.deal()
+  }
+
+  // Mid-game roster sync: the registry owns seat order, so the engine
+  // mirrors every splice to keep turn/scores/racks aligned with seats.
+  // Removing the last remaining player is refused; solo (2->1)
+  // continuation keeps playing with turn pinned at 0.
+  removePlayer(index: number): void {
+    if (!Number.isInteger(index) || index < 0 || index >= this.numPlayers) {
+      throw new RangeError(`Game: player index out of range: ${index}`)
+    }
+    if (this.numPlayers <= 1) {
+      throw new RangeError('Game: cannot remove the last player')
+    }
+    this.scores.splice(index, 1)
+    this.racks.splice(index, 1)
+    this.numPlayers -= 1
+    if (index < this.turn) this.turn -= 1
+    else if (index === this.turn) this.turn = this.turn % this.numPlayers
+    if (this.winner === index) this.winner = null
+    else if (this.winner !== null && this.winner > index) this.winner -= 1
+  }
+
+  // Mid-game re-seat: appends a fresh 7-tile draw (bag remainder when
+  // short) without touching the current turn. Returns the new index.
+  addPlayer(): number {
+    const rack = this._bag.draw(RACK_SIZE)
+    this.scores.push(0)
+    this.racks.push(rack)
+    this.numPlayers += 1
+    return this.numPlayers - 1
   }
 
   private deal(): void {

@@ -187,4 +187,65 @@ describe('bot seats', () => {
     binding.entries.get(code)?.timer.disarm()
     binding.disarmBot(code)
   })
+
+  it('mid-game remove_bot shrinks the engine instead of leaving a ghost turn', () => {
+    const { binding, registry } = makeBinding(() => true)
+    const { code, t0 } = hostRoom(binding)
+    binding.handleMessage({ v: 1, m: 'add_bot', code, token: t0 })
+    binding.handleMessage({ v: 1, m: 'start_game', code, token: t0, seed: 7 })
+    // Human passes so the bot holds the turn; removing it must not park
+    // the game on the human auto-pass clock for a seat with no owner.
+    const passed = binding.handleMessage({ v: 1, m: 'pass', code, token: t0 })
+    expect(passed['ok']).toBe(true)
+    expect(passed['turn']).toBe(1)
+    const removed = binding.handleMessage({ v: 1, m: 'remove_bot', code, token: t0 })
+    expect(removed['ok']).toBe(true)
+    expect(removed['seats']).toBe(1)
+    const entry = binding.entries.get(code)
+    expect(entry).toBeDefined()
+    const state = entry!.game.getState()
+    const seats = registry.get(code)?.seats.length ?? -1
+    expect(seats).toBe(1)
+    expect(state.names.length).toBe(seats)
+    expect(state.scores.length).toBe(seats)
+    expect(state.racks.length).toBe(seats)
+    // Turn remaps onto the surviving seat (1 % 1 == 0) and the removed
+    // bot's pending think is cancelled in favour of the human clock.
+    expect(state.turn).toBe(0)
+    expect(entry!.botTimer).toBeNull()
+    expect(entry!.timer.armed).toBe(true)
+    entry!.timer.disarm()
+    binding.disarmBot(code)
+  })
+
+  it('mid-game remove then re-add keeps the engine and registry in sync', () => {
+    const { binding, registry } = makeBinding(() => true)
+    const { code, t0 } = hostRoom(binding)
+    binding.handleMessage({ v: 1, m: 'add_bot', code, token: t0 })
+    binding.handleMessage({ v: 1, m: 'start_game', code, token: t0, seed: 7 })
+    expect(binding.entries.get(code)?.game.getState().turn).toBe(0)
+    const removed = binding.handleMessage({ v: 1, m: 'remove_bot', code, token: t0 })
+    expect(removed['ok']).toBe(true)
+    // Removing a seat after the turn leaves the turn and clock alone.
+    const mid = binding.entries.get(code)!.game.getState()
+    expect(mid.turn).toBe(0)
+    expect(mid.names.length).toBe(1)
+    expect(binding.entries.get(code)!.botTimer).toBeNull()
+    const readded = binding.handleMessage({ v: 1, m: 'add_bot', code, token: t0 })
+    expect(readded['ok']).toBe(true)
+    expect(readded['bot_seat']).toBe(1)
+    const entry = binding.entries.get(code)!
+    const state = entry.game.getState()
+    const seats = registry.get(code)?.seats.length ?? -1
+    expect(seats).toBe(2)
+    expect(state.names.length).toBe(seats)
+    expect(state.scores.length).toBe(seats)
+    expect(state.racks.length).toBe(seats)
+    expect(state.names[1]).toBe(BOT_NAME)
+    expect(state.racks[1].length).toBe(7)
+    // Re-seating never disturbs the current turn.
+    expect(state.turn).toBe(0)
+    entry.timer.disarm()
+    binding.disarmBot(code)
+  })
 })

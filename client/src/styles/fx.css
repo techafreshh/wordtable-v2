@@ -1,4 +1,4 @@
-/* GSAP-adjacent CSS keyframes for commit / reject / deal motion */
+/* CSS keyframes for commit / reject / deal motion */
 
 @keyframes slam-in {
   from { transform: translateY(-14px) scale(1.15); }

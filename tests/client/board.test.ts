@@ -76,6 +76,23 @@ describe('Board markup', () => {
     expect(html).toContain('class="tile"')
     expect(count(/class="sq /g, html)).toBe(225)
   })
+
+  it('escapes hostile tile markup instead of injecting tags', () => {
+    const html = buildBoardHTML({ H8: '<img src=x onerror=alert(1)>' })
+    expect(html).not.toContain('<img')
+    expect(html).toContain('&lt;img')
+  })
+
+  it('neutralizes attribute-breakout quotes in tile faces', () => {
+    const html = buildBoardHTML({ H8: '"onmouseover="x' })
+    expect(html).toContain('&quot;')
+    expect(html).not.toContain('"onmouseover="x')
+  })
+
+  it('renders a plain tile face byte-exact', () => {
+    const html = buildBoardHTML({ H8: 'A' })
+    expect(html).toContain('data-tile="A">A<')
+  })
 })
 
 describe('Board stylesheets', () => {

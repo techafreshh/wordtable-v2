@@ -248,6 +248,32 @@ export function handleFrame(frame: Record<string, unknown>): void {
   const m = typeof raw === 'string' ? raw.trim().toLowerCase() : ''
   if (m === 'state_sync') {
     gameStore.getState().applyStateSync(frame)
+    // Seat lineup first: scores pad/truncate to seats.length and turn
+    // clamps to seats.length - 1, so the lineup must settle before them.
+    // seats_info entries are {seat, name} (server binding.ts seatsInfoFor);
+    // a missing/empty/malformed lineup leaves the local seats untouched.
+    if (Array.isArray(frame['seats_info'])) {
+      const info = frame['seats_info'] as unknown[]
+      const ranked: Array<{ seat: number; index: number; name: string }> = []
+      for (let index = 0; index < info.length; index++) {
+        const entry = info[index]
+        if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) continue
+        const rec = entry as Record<string, unknown>
+        if (typeof rec['name'] !== 'string' || rec['name'].trim() === '') continue
+        const rawSeat = rec['seat']
+        const seat =
+          typeof rawSeat === 'number' && Number.isInteger(rawSeat)
+            ? rawSeat
+            : typeof rawSeat === 'string' && rawSeat.trim() !== '' && Number.isInteger(Number(rawSeat))
+              ? Number(rawSeat)
+              : index
+        ranked.push({ seat, index, name: rec['name'] as string })
+      }
+      ranked.sort((a, b) => (a.seat !== b.seat ? a.seat - b.seat : a.index - b.index))
+      if (ranked.length > 0) {
+        uiStore.getState().setSeats(ranked.map((r) => r.name))
+      }
+    }
     if (Array.isArray(frame['scores'])) {
       uiStore.getState().setScores(frame['scores'] as number[])
     }

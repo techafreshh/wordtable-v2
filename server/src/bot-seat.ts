@@ -14,8 +14,3 @@ export function botThinkDelaySecs(seed: unknown): number {
 export function botThinkDelayMs(seed: unknown): number {
   return botThinkDelaySecs(seed) * 1000;
 }
-
-/** True when the seat name is the bot seat. */
-export function isBotSeatName(name: unknown): boolean {
-  return name === BOT_NAME;
-}

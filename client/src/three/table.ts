@@ -6,7 +6,23 @@
 // forced `?nogl=1` — returns null and leaves the CSS gradient fallback
 // in place, logging at most one neutral line that names no context API.
 
-import * as THREE from 'three'
+import {
+  AmbientLight,
+  BufferAttribute,
+  BufferGeometry,
+  CanvasTexture,
+  DirectionalLight,
+  Mesh,
+  MeshBasicMaterial,
+  MeshStandardMaterial,
+  PerspectiveCamera,
+  PlaneGeometry,
+  Points,
+  PointsMaterial,
+  Scene,
+  WebGLRenderer,
+  type Material,
+} from 'three'
 import { createParallax } from './parallax'
 
 // `?nogl=1` guard lives in ./backdrop-guard (Three-free) so the entry
@@ -28,7 +44,7 @@ const BOARD_SHIFT_Y = 6
 
 // Soft elliptical contact shadow painted on a canvas texture — no
 // shadow-map pass, so the ambient loop stays one draw of felt.
-function makeShadowTexture(): THREE.CanvasTexture {
+function makeShadowTexture(): CanvasTexture {
   const size = 256
   const tile = document.createElement('canvas')
   tile.width = size
@@ -49,19 +65,19 @@ function makeShadowTexture(): THREE.CanvasTexture {
     ctx.fillStyle = grad
     ctx.fillRect(0, 0, size, size)
   }
-  return new THREE.CanvasTexture(tile)
+  return new CanvasTexture(tile)
 }
 
-function makeDust(): THREE.Points {
+function makeDust(): Points {
   const positions = new Float32Array(DUST_COUNT * 3)
   for (let i = 0; i < DUST_COUNT; i++) {
     positions[i * 3] = (Math.random() - 0.5) * 10
     positions[i * 3 + 1] = -0.5 + Math.random() * 3
     positions[i * 3 + 2] = -3 + Math.random() * 5
   }
-  const geometry = new THREE.BufferGeometry()
-  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
-  const material = new THREE.PointsMaterial({
+  const geometry = new BufferGeometry()
+  geometry.setAttribute('position', new BufferAttribute(positions, 3))
+  const material = new PointsMaterial({
     color: 0xffe6b3,
     size: 0.025,
     transparent: true,
@@ -69,7 +85,7 @@ function makeDust(): THREE.Points {
     depthWrite: false,
     sizeAttenuation: true,
   })
-  return new THREE.Points(geometry, material)
+  return new Points(geometry, material)
 }
 
 // Parallax target: the live board grid when mounted, else the app root.
@@ -173,9 +189,9 @@ export function initTableBackdrop(host: HTMLElement | null): TableBackdropHandle
       return fail()
     }
 
-    let renderer: THREE.WebGLRenderer
+    let renderer: WebGLRenderer
     try {
-      renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true })
+      renderer = new WebGLRenderer({ canvas, antialias: true, alpha: true })
     } catch {
       return fail()
     }
@@ -187,10 +203,10 @@ export function initTableBackdrop(host: HTMLElement | null): TableBackdropHandle
       }
     })
 
-    const scene = new THREE.Scene()
+    const scene = new Scene()
     const hostWidth = host.clientWidth || window.innerWidth || 1
     const hostHeight = host.clientHeight || window.innerHeight || 1
-    const camera = new THREE.PerspectiveCamera(
+    const camera = new PerspectiveCamera(
       45,
       hostWidth / hostHeight,
       0.1,
@@ -202,22 +218,22 @@ export function initTableBackdrop(host: HTMLElement | null): TableBackdropHandle
     camera.position.set(baseX, baseY, baseZ)
     camera.lookAt(0, 0, 0)
 
-    const felt = new THREE.Mesh(
-      new THREE.PlaneGeometry(16, 10),
-      new THREE.MeshStandardMaterial({ color: FELT_COLOR, roughness: 0.95, metalness: 0 }),
+    const felt = new Mesh(
+      new PlaneGeometry(16, 10),
+      new MeshStandardMaterial({ color: FELT_COLOR, roughness: 0.95, metalness: 0 }),
     )
     felt.rotation.x = -Math.PI / 2
     felt.position.y = -0.6
     scene.add(felt)
 
-    const key = new THREE.DirectionalLight(0xffd9a0, 1.6)
+    const key = new DirectionalLight(0xffd9a0, 1.6)
     key.position.set(3, 5, 2)
     scene.add(key)
-    scene.add(new THREE.AmbientLight(0x9a8a6a, 0.55))
+    scene.add(new AmbientLight(0x9a8a6a, 0.55))
 
-    const blob = new THREE.Mesh(
-      new THREE.PlaneGeometry(5.2, 3.4),
-      new THREE.MeshBasicMaterial({
+    const blob = new Mesh(
+      new PlaneGeometry(5.2, 3.4),
+      new MeshBasicMaterial({
         map: makeShadowTexture(),
         transparent: true,
         opacity: 0.8,
@@ -356,11 +372,11 @@ export function initTableBackdrop(host: HTMLElement | null): TableBackdropHandle
         }
         try {
           felt.geometry.dispose()
-          ;(felt.material as THREE.Material).dispose()
-          ;(blob.material as THREE.Material).dispose()
+          ;(felt.material as Material).dispose()
+          ;(blob.material as Material).dispose()
           blob.geometry.dispose()
           dust.geometry.dispose()
-          ;(dust.material as THREE.Material).dispose()
+          ;(dust.material as Material).dispose()
         } catch {
           // GPU already gone; DOM removal above is what matters.
         }

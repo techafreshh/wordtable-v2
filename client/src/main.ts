@@ -45,6 +45,7 @@ import {
   netStore,
   readPersistedNet,
   type NetReply,
+  type PlacedTile,
 } from './store/net'
 import { TileBag } from '../../shared/engine/bag'
 import { isBackdropDisabled } from './three/backdrop-guard'
@@ -305,6 +306,8 @@ declare global {
         unread: number
       }
       reset: () => void
+      placeOnline: (tiles: PlacedTile[]) => Promise<NetReply>
+      passOnline: () => Promise<NetReply>
       connect: (url?: string) => Promise<NetReply>
       createRoom: (name: string) => Promise<NetReply>
       joinRoom: (code: string, name: string) => Promise<NetReply>
@@ -347,6 +350,8 @@ function installHook(): void {
       uiStore.getState().receiveChat(from, text),
     sendChatOnline: (text: string) => net.sendChat(text),
     sendEmote: (emote: string) => net.sendEmote(emote),
+    placeOnline: (tiles: PlacedTile[]) => net.placeTiles(tiles),
+    passOnline: () => net.passTurn(),
     getState: () => {
       const state = gameStore.getState()
       const ui = uiStore.getState()

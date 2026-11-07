@@ -734,6 +734,14 @@ export function createBinding(registry: RoomRegistry, opts: CreateBindingOpts) {
       })
       const live = entries.get(roomCode)
       if (live) {
+        // Mirror the registry append into the engine (fresh 7-tile rack).
+        // Both sides append at the end, so the engine index matches the
+        // registry seat and the current turn/clock stays untouched.
+        const seatedAt = live.game.addSeat(BOT_NAME)
+        if (seatedAt !== botSeat) {
+          // Unreachable while both sides append at the end; fall through
+          // and keep serving rather than failing the reply.
+        }
         broadcastState(roomCode, {
           bot: BOT_NAME,
           bot_seat: botSeat,
@@ -774,6 +782,9 @@ export function createBinding(registry: RoomRegistry, opts: CreateBindingOpts) {
       const seatRaw = getField(obj, 'seat', 'target', 'seat_index', 'which', 'bot_seat')
       const res = registry.removeBot(roomCode, seatRaw)
       if (!res.ok) return errReply(m, res.error)
+      // res.removed keeps its pre-renumber seat: the registry renumbers
+      // only the retained seats, so this is the engine index to splice.
+      const removedIndex = res.removed.seat
       disarmBot(roomCode)
       const seats_info = seatsInfoFor(roomCode)
       const reply = okReply(m, {
@@ -783,7 +794,18 @@ export function createBinding(registry: RoomRegistry, opts: CreateBindingOpts) {
       })
       const live = entries.get(roomCode)
       if (live) {
-        if (live.game.getState().status !== 'PLAYING') {
+        // Mirror the registry splice into the engine so the removed turn
+        // index never falls through to the human auto-pass clock.
+        if (
+          Number.isInteger(removedIndex) &&
+          removedIndex >= 0 &&
+          removedIndex < live.game.game.numPlayers
+        ) {
+          live.game.removeSeat(removedIndex)
+        }
+        if (live.game.getState().status === 'PLAYING') {
+          afterTurn(roomCode)
+        } else {
           live.timer.disarm()
           disarmBot(roomCode)
         }

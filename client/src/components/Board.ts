@@ -33,6 +33,14 @@ const PREMIUM_LEGEND: readonly string[] = [
   '3..d...3...d..3',
 ]
 
+function escapeHTML(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
 function checkBounds(row: number, col: number, fn: string): void {
   if (
     !Number.isInteger(row) ||
@@ -115,7 +123,7 @@ function cellHTML(
   const tile = tiles[sq]
   const inner =
     tile !== undefined
-      ? `<div class="tile${lastMove.has(sq) ? ' last-move' : ''}" data-tile="${tile}">${tile}</div>`
+      ? `<div class="tile${lastMove.has(sq) ? ' last-move' : ''}" data-tile="${escapeHTML(tile)}">${escapeHTML(tile)}</div>`
       : kind === 'STAR'
         ? `<span class="star" aria-hidden="true">★</span>`
         : premiumText(kind) === ''

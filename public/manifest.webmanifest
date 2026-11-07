@@ -1,0 +1,25 @@
+{
+  "name": "Wordtable",
+  "short_name": "Wordtable",
+  "description": "Offline-first hot-seat and online word game on a wooden table.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#2e1a12",
+  "theme_color": "#2e1a12",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

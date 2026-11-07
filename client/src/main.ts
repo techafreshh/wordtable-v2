@@ -422,6 +422,24 @@ function boot(): void {
     render()
   })
   installHook()
+  // PWA shell (issue #21): register the versioned service worker so the
+  // table installs and replays offline. Decorative like the backdrop — a
+  // failed registration must never break the board, hence never-throw.
+  try {
+    if ('serviceWorker' in navigator) {
+      let proto = ''
+      try {
+        proto = window.location?.protocol ?? ''
+      } catch {
+        proto = ''
+      }
+      if (proto === 'http:' || proto === 'https:') {
+        void navigator.serviceWorker.register('/sw.js').catch(() => {})
+      }
+    }
+  } catch {
+    // Offline-capable install is best-effort; the table stays playable.
+  }
   render()
   gameStore.getState().setRack(readSeededFaces() ?? dealFaces())
   // Online table (issue #14): dial only when the boot URL carries an

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { RoomRegistry } from '../../server/src/rooms'
 import { createBinding, type RoomReply } from '../../server/src/binding'
 import { BOT_NAME, botThinkDelaySecs, botThinkDelayMs } from '../../server/src/bot-seat'
+import * as botSeat from '../../server/src/bot-seat'
 
 function makeBinding(isWord: (w: string) => boolean = () => true) {
   const registry = new RoomRegistry()
@@ -36,6 +37,13 @@ afterEach(() => {
 })
 
 describe('bot seats', () => {
+  it('does not export isBotSeatName', () => {
+    expect((botSeat as Record<string, unknown>)['isBotSeatName']).toBeUndefined()
+    expect(botSeat.BOT_NAME).toBe('Botgomery')
+    expect(typeof botSeat.botThinkDelaySecs).toBe('function')
+    expect(typeof botSeat.botThinkDelayMs).toBe('function')
+    expect(botSeat.botThinkDelaySecs(7)).toBe(12)
+  })
   it('host add_bot seats Botgomery with is_bot', () => {
     const { binding, sent } = makeBinding()
     const { code, t0 } = hostRoom(binding)

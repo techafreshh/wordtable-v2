@@ -83,7 +83,6 @@ describe('binding private racks', () => {
     for (const letter of ['Q', 'Z', 'J', 'X', 'K', 'V', 'B']) {
       expect(rack1).not.toContain(letter)
     }
-    expect(JSON.stringify(f1?.['rack'])).not.toContain('Q')
     // Seat0 frame keeps its own pinned rack.
     expect(rack0).toEqual(['Q', 'Z', 'J', 'X', 'K', 'V', 'B'])
     void t1
@@ -186,7 +185,45 @@ describe('binding private racks', () => {
     const v1 = viewFor(entry, 1) as RoomReply
     expect(v0['rack']).toEqual(['Q', 'Q', 'Q', 'Q', 'Q', 'Q', 'Q'])
     expect(v1['rack']).toEqual(['E', 'E', 'E', 'E', 'E', 'E', 'E'])
-    expect(JSON.stringify(v1)).not.toContain('Q')
+    expect(v1['rack']).not.toContain('Q')
+  })
+
+  it('rack isolation holds even when the room code contains Q', () => {
+    const { binding, sent } = makeBinding()
+    const { code, t0 } = startTwoSeats(binding)
+    expect(
+      binding.handleMessage({
+        v: 1,
+        m: 'debug_set_rack',
+        code,
+        token: t0,
+        seat: 0,
+        rack: ['Q', 'Z', 'J', 'X', 'K', 'V', 'B'],
+      })['ok'],
+    ).toBe(true)
+    expect(
+      binding.handleMessage({
+        v: 1,
+        m: 'debug_set_rack',
+        code,
+        token: t0,
+        seat: 1,
+        rack: ['A', 'A', 'A', 'A', 'A', 'A', 'A'],
+      })['ok'],
+    ).toBe(true)
+    sent.length = 0
+    const p = binding.handleMessage({ v: 1, m: 'pass', code, token: t0 })
+    expect(p['ok']).toBe(true)
+    const f1 = sent.find((s) => s.seat === 1)?.frame
+    expect(f1).toBeDefined()
+    if (!f1) return
+    // Plant a Q-full room code onto a local frame copy only; binding state untouched.
+    const copy: RoomReply = { ...f1, code: 'QQQQ' }
+    // Structural rack assertions are code-independent.
+    expect(copy['rack']).toEqual(['A', 'A', 'A', 'A', 'A', 'A', 'A'])
+    expect(copy['rack']).not.toContain('Q')
+    // The old whole-frame idiom would fail here: the frame carries the code.
+    expect(JSON.stringify(copy)).toContain('Q')
   })
 })
 

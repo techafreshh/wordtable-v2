@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently -k \"vite\" \"tsx server/src/ws.ts\"",
-    "build": "tsc -b && vite build && vite build --config vite.server.config.ts",
+    "build": "node scripts/clean-dist.mjs && tsc -b && vite build && vite build --config vite.server.config.ts",
+    "clean": "node scripts/clean-dist.mjs",
     "check-bundle": "node scripts/check-bundle.mjs",
     "serve": "node dist/server.js",
     "preview": "vite preview",

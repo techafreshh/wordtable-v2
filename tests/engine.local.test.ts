@@ -257,6 +257,19 @@ describe('LocalGame facade', () => {
     expect(game.getState().chat.length).toBe(1)
   })
 
+  it('chat truncates emoji runs to 200 code points without splitting surrogate pairs', () => {
+    const game = new LocalGame(['A', 'B'])
+    const result = game.chat(0, '😀'.repeat(250))
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      const ok = result as ChatOk
+      expect(Array.from(ok.text)).toHaveLength(200)
+      expect(ok.text).toBe('😀'.repeat(200))
+    }
+    expect(game.chat(0, '   ')).toEqual({ ok: false, reason: 'BAD_TEXT' })
+    expect(game.getState().chat.length).toBe(1)
+  })
+
   it('emits placed events to on() listeners and detaches with off()', () => {
     const game = new LocalGame(['A', 'B'], 1, () => true)
     const seen: string[] = []

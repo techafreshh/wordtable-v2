@@ -2,6 +2,7 @@
 // state (screen, selection, toast, blank-picker) for later screens to build on.
 
 import { createStore } from 'zustand/vanilla'
+import { truncateChatText } from '../../../shared/engine/chat-text'
 
 export type Screen = 'start' | 'setup' | 'lobby' | 'table' | 'recap'
 
@@ -163,7 +164,7 @@ export const uiStore = createStore<UiState>()((set, get) => ({
   // `from` is the current seat name; the net layer will feed remote
   // traffic through receiveChat instead.
   sendChat: (text) => {
-    const body = String(text ?? '').trim().slice(0, 200)
+    const body = truncateChatText(String(text ?? '').trim())
     if (body === '') return false
     const s = get()
     const from = s.seats[s.turn] ?? s.seats[0] ?? 'You'
@@ -173,7 +174,7 @@ export const uiStore = createStore<UiState>()((set, get) => ({
   // Remote seam for the future net module: appends, and bumps the
   // badge only while the panel is closed.
   receiveChat: (from, text) => {
-    const body = String(text ?? '').trim().slice(0, 200)
+    const body = truncateChatText(String(text ?? '').trim())
     if (body === '') return false
     const name = String(from ?? '').trim().slice(0, 16) || 'Rival'
     const s = get()

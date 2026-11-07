@@ -44,6 +44,7 @@ const MIME: Record<string, string> = {
   '.webmanifest': 'application/manifest+json',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
+  '.wav': 'audio/wav',
   '.ico': 'image/x-icon',
 }
 

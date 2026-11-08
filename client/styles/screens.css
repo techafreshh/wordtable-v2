@@ -420,3 +420,105 @@ input.seat-bot:disabled {
 #reconnect-overlay[hidden] {
   display: none;
 }
+
+/* Online rooms (issue #88): lobby/table reuse the warm-club tokens.
+ * #room-code is the 4-letter brass chip, #copy-link/#online-start/
+ * #add-bot/#leave-online reuse the .screen-actions treatments, and
+ * #join-modal lays out the 4-char code entry. All touch targets keep
+ * the 44px minimum from the offline screens. */
+#online-lobby {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+}
+#room-code {
+  display: inline-block;
+  min-height: 44px;
+  padding: 0.4rem 1.2rem;
+  border-radius: var(--radius-md);
+  background: var(--wood-dark);
+  color: var(--brass-hot);
+  border: 1px solid var(--brass);
+  font-family: var(--font-stack);
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  text-indent: 0.3em;
+  font-variant-numeric: tabular-nums;
+}
+#copy-link,
+#online-start,
+#add-bot,
+#leave-online,
+#join-confirm,
+#join-cancel,
+#exchange-button {
+  min-width: 44px;
+  min-height: 44px;
+  border: none;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  padding: 0.6rem 1.4rem;
+  font-family: var(--font-stack);
+  font-size: 1rem;
+  font-weight: 700;
+}
+#copy-link,
+#leave-online,
+#join-cancel {
+  background: var(--brass);
+  color: var(--wood-dark);
+}
+#online-start,
+#add-bot,
+#join-confirm {
+  background: var(--felt-bright);
+  color: var(--ivory);
+  border: 1px solid var(--brass);
+}
+#exchange-button {
+  background: var(--wood-dark);
+  color: var(--ivory-dim);
+  border: 1px solid var(--brass);
+}
+#join-modal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  width: min(90vw, 320px);
+  padding: 1rem 0.75rem;
+  border-radius: var(--radius-md);
+  background: var(--wood-dark);
+  border: 1px solid var(--brass);
+}
+#join-modal label {
+  color: var(--ivory-dim);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+#join-code {
+  width: min(60vw, 200px);
+  min-height: 44px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--brass);
+  background: var(--wood-dark);
+  color: var(--ivory);
+  font-family: var(--font-stack);
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  text-indent: 0.3em;
+  text-align: center;
+  text-transform: uppercase;
+}
+#online-table {
+  width: 100%;
+}
+#online-table #exchange-button {
+  min-height: 44px;
+}

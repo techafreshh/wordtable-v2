@@ -2,7 +2,14 @@
 // dispatcher. Session/ended guards live in main.ts, not in the parser,
 // so parsing stays a total function over the five routes.
 
-export type Route = 'start' | 'setup' | 'lobby' | 'table' | 'recap'
+export type Route =
+  | 'start'
+  | 'setup'
+  | 'lobby'
+  | 'table'
+  | 'recap'
+  | 'online-lobby'
+  | 'online-table'
 
 export const ROUTES: readonly Route[] = [
   'start',
@@ -10,6 +17,8 @@ export const ROUTES: readonly Route[] = [
   'lobby',
   'table',
   'recap',
+  'online-lobby',
+  'online-table',
 ]
 
 export function parseRoute(hash: string): Route {
@@ -27,6 +36,10 @@ export function parseRoute(hash: string): Route {
       return 'table'
     case 'recap':
       return 'recap'
+    case 'online-lobby':
+      return 'online-lobby'
+    case 'online-table':
+      return 'online-table'
     default:
       return 'start'
   }

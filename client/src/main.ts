@@ -37,6 +37,16 @@ import {
   renderHotSeatTable,
   syncGameFromSession,
 } from './components/HotSeatTable'
+import {
+  buildOnlineLobbyHTML,
+  mountOnlineLobby,
+  renderOnlineLobby,
+} from './components/OnlineLobby'
+import {
+  buildOnlineTableHTML,
+  mountOnlineTable,
+  renderOnlineTable,
+} from './components/OnlineTable'
 import { buildRecapHTML, mountRecap } from './components/Recap'
 import { buildToastHTML, mountToast } from './components/Toast'
 import { ensureReconnectOverlay } from './components/ReconnectOverlay'
@@ -137,6 +147,13 @@ function render(): void {
   let route = raw
   if (route === 'table' && snap === null) route = 'setup'
   else if (route === 'lobby' && snap === null) route = 'setup'
+  // Online guards (issue #88): both online routes need a live seat — a
+  // deep link with no code+token bounces to start exactly like the
+  // session-snapshot guards above bounce to setup.
+  else if (route === 'online-lobby' || route === 'online-table') {
+    const auth = netStore.getState()
+    if (auth.code === null || auth.token === null) route = 'start'
+  }
   else if (
     route === 'recap' &&
     (snap === null || snap.status !== GameStatus.ENDED)
@@ -235,6 +252,33 @@ function render(): void {
       mountHotSeatTable(host)
       break
     }
+    case 'online-lobby': {
+      // Online lobby (issue #88): room code + seats from the net/ui
+      // stores; host controls derive from seat 0 inside the builder.
+      const auth = netStore.getState()
+      host.innerHTML =
+        buildOnlineLobbyHTML(
+          auth.code ?? '',
+          uiStore.getState().seats,
+          auth.seat === 0,
+        ) + buildToastHTML(uiStore.getState().toast)
+      const onlineToast = host.querySelector<HTMLElement>('#toast')
+      if (onlineToast) mountToast(onlineToast)
+      mountOnlineLobby(host)
+      break
+    }
+    case 'online-table': {
+      // Online table (issue #88): the placement scratch mirrors the
+      // authoritative projection — state_sync already landed in the
+      // game/ui stores via net.handleFrame before this paint.
+      host.innerHTML =
+        buildOnlineTableHTML() +
+        buildToastHTML(uiStore.getState().toast)
+      const tableToast = host.querySelector<HTMLElement>('#toast')
+      if (tableToast) mountToast(tableToast)
+      mountOnlineTable(host)
+      break
+    }
     case 'recap': {
       const ended = sessionStore.getState().snapshot()
       if (ended === null) {
@@ -269,6 +313,37 @@ function repaintLobbyChat(): void {
     buildChatBubbleHTML(ui.unread, ui.chatOpen) +
     buildChatPanelHTML(ui.chat, ui.chatOpen)
   if (chatRoot.innerHTML !== next) chatRoot.innerHTML = next
+}
+// Online lobby repaint (issue #88): seat broadcasts repaint the plaques
+// while the lobby is showing, and the `started` flip auto-advances to
+// the online table — mirroring the session table's ended → recap hop.
+function repaintOnlineLobby(): void {
+  const state = netStore.getState()
+  if (state.started === true && currentRoute() === 'online-lobby') {
+    navigate('online-table')
+    return
+  }
+  if (currentRoute() !== 'online-lobby') return
+  const host = screenHost()
+  if (!host || !host.querySelector('#online-lobby')) return
+  try {
+    renderOnlineLobby(host)
+  } catch {
+    // Patch is decorative; the route render stays authoritative.
+  }
+}
+// Online table patch (issue #88): state_sync projections (board/rack
+// via gameStore, turn/scores/chat via uiStore) repaint the live regions
+// without a full route render, mirroring repaintSessionTable.
+function repaintOnlineTable(): void {
+  if (currentRoute() !== 'online-table') return
+  const host = screenHost()
+  if (!host || !host.querySelector('#online-table')) return
+  try {
+    renderOnlineTable(host)
+  } catch {
+    // Patch is decorative; the route render stays authoritative.
+  }
 }
 // Session table patch (issue #85): game/ui intents (placements, prov
 // chip, selection, toast-adjacent cursors) repaint the live regions
@@ -329,12 +404,14 @@ declare global {
       rejoin: () => Promise<NetReply>
       disconnect: () => void
       startGame: () => Promise<NetReply>
+      addBot: () => Promise<NetReply>
       netState: () => {
         url: string
         status: string
         code: string | null
         token: string | null
         seat: number | null
+        started: boolean
       }
       pass: () => void
       placeTableMove: (specs: PlaceSpec[]) => IntentResult
@@ -406,6 +483,7 @@ function installHook(): void {
     rejoin: () => net.rejoin(),
     disconnect: () => net.disconnect(),
     startGame: () => net.startGame(),
+    addBot: () => net.addBot(),
     netState: () => ({ ...netStore.getState() }),
     pass: () => {
       sessionStore.getState().passTurn()
@@ -438,6 +516,11 @@ function boot(): void {
   gameStore.subscribe(repaintSessionTable)
   uiStore.subscribe(repaintLobbyChat)
   uiStore.subscribe(repaintSessionTable)
+  // Online loop (issue #88): broadcasts repaint the lobby/table live
+  // regions and flip the lobby into the table on `started`.
+  netStore.subscribe(repaintOnlineLobby)
+  gameStore.subscribe(repaintOnlineTable)
+  uiStore.subscribe(repaintOnlineTable)
   // Session intents (button passes, bot auto-pass, hook forcing) repaint
   // the table/recap/lobby. Start/setup keep their inputs: no session
   // intent can fire while they are showing (seat 0 is always human).

@@ -21,8 +21,8 @@ import { buildBlankPickerHTML, mountBlankPicker } from './BlankPicker'
 import { buildToastHTML, mountToast, showToastText } from './Toast'
 import { buildReconnectOverlayHTML } from './ReconnectOverlay'
 import { buildPlayerStripHTML, mountPlayerStrip } from './PlayerStrip'
-import { buildChatBubbleHTML, mountChatBubble } from './ChatBubble'
-import { buildChatPanelHTML, mountChatPanel } from './ChatPanel'
+import { mountChatBubble } from './ChatBubble'
+import { mountChatPanel, repaintChatRoot } from './ChatPanel'
 import {
   buildSoundToggleHTML,
   mountSoundToggle,
@@ -140,27 +140,7 @@ function renderHud(app: HTMLElement): void {
     if (strip.outerHTML !== next) strip.outerHTML = next
   }
   const chatRoot = app.querySelector<HTMLElement>('#chat-root')
-  if (chatRoot) {
-    const input = chatRoot.querySelector<HTMLInputElement>('.chat-input')
-    const draft = input?.value ?? ''
-    const focused =
-      input !== null &&
-      input !== undefined &&
-      input.ownerDocument.activeElement === input
-    const next =
-      buildChatBubbleHTML(ui.unread, ui.chatOpen) +
-      buildChatPanelHTML(ui.chat, ui.chatOpen)
-    if (chatRoot.innerHTML !== next) {
-      chatRoot.innerHTML = next
-      if (draft !== '' || focused) {
-        const restored = chatRoot.querySelector<HTMLInputElement>('.chat-input')
-        if (restored) {
-          restored.value = draft
-          if (focused) restored.focus()
-        }
-      }
-    }
-  }
+  if (chatRoot) repaintChatRoot(chatRoot)
   const toggle = app.querySelector<HTMLElement>('#sound-toggle')
   if (toggle) repaintSoundToggle(toggle)
 }

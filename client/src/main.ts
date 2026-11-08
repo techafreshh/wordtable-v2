@@ -29,8 +29,7 @@ import {
 } from './components/StartScreen'
 import { buildSetupHTML, mountSetup } from './components/Setup'
 import { buildLobbyHTML, mountLobby } from './components/Lobby'
-import { buildChatBubbleHTML } from './components/ChatBubble'
-import { buildChatPanelHTML } from './components/ChatPanel'
+import { repaintChatRoot } from './components/ChatPanel'
 import {
   buildHotSeatTableHTML,
   mountHotSeatTable,
@@ -308,11 +307,7 @@ function repaintLobbyChat(): void {
   const host = screenHost()
   const chatRoot = host?.querySelector<HTMLElement>('#chat-root')
   if (!chatRoot) return
-  const ui = uiStore.getState()
-  const next =
-    buildChatBubbleHTML(ui.unread, ui.chatOpen) +
-    buildChatPanelHTML(ui.chat, ui.chatOpen)
-  if (chatRoot.innerHTML !== next) chatRoot.innerHTML = next
+  repaintChatRoot(chatRoot)
 }
 // Online lobby repaint (issue #88): seat broadcasts repaint the plaques
 // while the lobby is showing, and the `started` flip auto-advances to

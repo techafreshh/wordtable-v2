@@ -13,9 +13,11 @@ jobs:
           node-version: '22'
       - run: npm ci
       - run: npm run typecheck
-      - run: npm test
-      - run: npm run soak -- --games 20 --seed 42
+      # Build BEFORE test: tests/server/static-serve.test.ts serves the
+      # production dist/ (SPA + PWA manifest) and 404s without it.
       - run: npm run build
       - run: node scripts/check-bundle.mjs
+      - run: npm test
+      - run: npm run soak -- --games 20 --seed 42
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e

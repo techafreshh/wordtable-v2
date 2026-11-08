@@ -19,7 +19,11 @@ import './styles/fx.css'
 import './styles/hud.css'
 import './styles/screens.css'
 import { GameStatus } from '../../shared/engine/game'
-import type { LocalSnapshot } from '../../shared/engine/local'
+import type {
+  IntentResult,
+  LocalSnapshot,
+  PlaceSpec,
+} from '../../shared/engine/local'
 import { parseRoute, navigate, startRouter, type Route } from './router'
 import {
   buildStartScreenHTML,
@@ -30,7 +34,12 @@ import { buildSetupHTML, mountSetup } from './components/Setup'
 import { buildLobbyHTML, mountLobby } from './components/Lobby'
 import { buildChatBubbleHTML } from './components/ChatBubble'
 import { buildChatPanelHTML } from './components/ChatPanel'
-import { buildHotSeatTableHTML, mountHotSeatTable } from './components/HotSeatTable'
+import {
+  buildHotSeatTableHTML,
+  mountHotSeatTable,
+  renderHotSeatTable,
+  syncGameFromSession,
+} from './components/HotSeatTable'
 import { buildRecapHTML, mountRecap } from './components/Recap'
 import { buildToastHTML, mountToast } from './components/Toast'
 import { ensureReconnectOverlay } from './components/ReconnectOverlay'
@@ -227,6 +236,10 @@ function render(): void {
         paintedHash = window.location.hash
         return
       }
+      // The placement scratch mirrors the engine snapshot: bot moves and
+      // commits land here before the skeleton paints, so the rack and the
+      // provisional chip always read the current turn seat.
+      syncGameFromSession()
       host.innerHTML =
         buildHotSeatTableHTML(tableSnap) +
         buildToastHTML(uiStore.getState().toast)
@@ -269,6 +282,20 @@ function repaintLobbyChat(): void {
     buildChatBubbleHTML(ui.unread, ui.chatOpen) +
     buildChatPanelHTML(ui.chat, ui.chatOpen)
   if (chatRoot.innerHTML !== next) chatRoot.innerHTML = next
+}
+// Session table patch (issue #85): game/ui intents (placements, prov
+// chip, selection, toast-adjacent cursors) repaint the live regions
+// without rebuilding mounts. Session intents keep the full render() path
+// above so bot moves resync and endings navigate.
+function repaintSessionTable(): void {
+  if (currentRoute() !== 'table') return
+  const host = screenHost()
+  if (!host || !host.querySelector('.screen-table')) return
+  try {
+    renderHotSeatTable(host)
+  } catch {
+    // Patch is decorative; the route render stays authoritative.
+  }
 }
 
 // Test/black-box hook: the legacy placement-table fields (issues #7-9)
@@ -322,6 +349,7 @@ declare global {
         seat: number | null
       }
       pass: () => void
+      placeTableMove: (specs: PlaceSpec[]) => IntentResult
       rematch: () => void
       snapshot: () => LocalSnapshot | null
       startSession: (names: string[], bots?: boolean[]) => void
@@ -393,6 +421,14 @@ function installHook(): void {
     pass: () => {
       sessionStore.getState().passTurn()
     },
+    // Scripted session play (issue #85): engine-level commit for the
+    // turn seat plus scratch resync, so a headless human→bot game runs
+    // on the hook alone (placeTableMove → bot timer → snapshot).
+    placeTableMove: (specs: PlaceSpec[]) => {
+      const result: IntentResult = sessionStore.getState().placeMove(specs)
+      syncGameFromSession()
+      return result
+    },
     rematch: () => {
       sessionStore.getState().rematch()
       navigate('table')
@@ -411,8 +447,10 @@ function boot(): void {
   app.innerHTML = '<div id="screen"></div>'
   startRouter(() => handleRoute())
   gameStore.subscribe(repaintLegacyTable)
+  gameStore.subscribe(repaintSessionTable)
   uiStore.subscribe(repaintLegacyTable)
   uiStore.subscribe(repaintLobbyChat)
+  uiStore.subscribe(repaintSessionTable)
   // Session intents (button passes, bot auto-pass, hook forcing) repaint
   // the table/recap/lobby. Start/setup keep their inputs: no session
   // intent can fire while they are showing (seat 0 is always human).

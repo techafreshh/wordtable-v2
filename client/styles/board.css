@@ -198,6 +198,38 @@ body {
   #rack-actions button { padding: 0.5rem 1rem; }
 }
 
+/* Phone touch floor (issue #91): on <=430px viewports the 15x15 grid
+ * inside min(viewport) shrinks to ~22px cells. The board host becomes a
+ * 2-D pan scroller holding a fixed 720px board, forcing each cell to
+ * (720 - 2x6 padding - 14x2 gaps) / 15 ~= 45.3px. Both table shells are
+ * covered: legacy `.table` and the session/online `.screen-table`.
+ * `display: block` avoids the flex-centering/clipped-overflow trap where
+ * a centered oversized child cannot scroll to its left edge. */
+@media (max-width: 430px) {
+  .table .board-host,
+  .screen-table .board-host {
+    display: block;
+    overflow: auto;
+    max-width: 100%;
+    max-height: calc(100dvh - 240px);
+    touch-action: pan-x pan-y;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+  }
+  .table .board-host .board,
+  .screen-table .board-host .board {
+    width: 720px;
+    min-width: 720px;
+    max-width: none;
+    margin-inline: auto;
+    scroll-snap-align: center;
+  }
+  .table .board-host .sq,
+  .screen-table .board-host .sq {
+    touch-action: manipulation;
+  }
+}
+
 /* Three.js table backdrop (issue #11): ambient canvas behind the board.
  * The #backdrop gradient above stays the fallback paint when the 3D
  * backdrop fails; the canvas never intercepts play. */

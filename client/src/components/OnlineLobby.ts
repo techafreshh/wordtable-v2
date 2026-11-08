@@ -9,7 +9,7 @@ import { gameStore } from '../store/game'
 import { net, netStore } from '../store/net'
 import { uiStore } from '../store/ui'
 import { buildChatBubbleHTML, mountChatBubble } from './ChatBubble'
-import { buildChatPanelHTML, mountChatPanel } from './ChatPanel'
+import { buildChatPanelHTML, mountChatPanel, repaintChatRoot } from './ChatPanel'
 import { mountToast } from './Toast'
 
 function escapeHTML(value: string): string {
@@ -153,13 +153,7 @@ export function mountOnlineLobby(root: HTMLElement): void {
     const repaint = (): void => {
       renderOnlineLobby(root)
       const nextChatRoot = root.querySelector<HTMLElement>('#chat-root')
-      if (nextChatRoot) {
-        const ui = uiStore.getState()
-        const next =
-          buildChatBubbleHTML(ui.unread, ui.chatOpen) +
-          buildChatPanelHTML(ui.chat, ui.chatOpen)
-        if (nextChatRoot.innerHTML !== next) nextChatRoot.innerHTML = next
-      }
+      if (nextChatRoot) repaintChatRoot(nextChatRoot)
     }
     netStore.subscribe(repaint)
     uiStore.subscribe(repaint)

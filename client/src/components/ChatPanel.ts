@@ -7,6 +7,7 @@
 // so those sends take the local-echo branch, and a closed-socket race on
 // the `online` branch falls back to local echo on NOT_CONNECTED.
 
+import { buildChatBubbleHTML } from './ChatBubble'
 import { net, netStore } from '../store/net'
 import { uiStore, type ChatMessage } from '../store/ui'
 
@@ -47,6 +48,41 @@ export function buildChatPanelHTML(chat: ChatMessage[], open: boolean): string {
     '</div>' +
     '</div>'
   )
+}
+
+// Shared chat repaint (issue #93): every `#chat-root` host (table HUD,
+// lobby, online lobby) repaints through this helper so draft preservation
+// stays identical everywhere. The typed value and focus survive the
+// innerHTML replace while the user is mid-typing; the send path clears
+// the *live* post-repaint node instead (see sendInputText).
+export function repaintChatRoot(chatRoot: HTMLElement): void {
+  const ui = uiStore.getState()
+  const next =
+    buildChatBubbleHTML(ui.unread, ui.chatOpen) +
+    buildChatPanelHTML(ui.chat, ui.chatOpen)
+  if (chatRoot.innerHTML === next) return
+  const input = chatRoot.querySelector<HTMLInputElement>('.chat-input')
+  const draft = input?.value ?? ''
+  let focused = false
+  try {
+    focused = input != null && input.ownerDocument?.activeElement === input
+  } catch {
+    focused = false
+  }
+  chatRoot.innerHTML = next
+  if (draft !== '' || focused) {
+    const restored = chatRoot.querySelector<HTMLInputElement>('.chat-input')
+    if (restored) {
+      restored.value = draft
+      if (focused) {
+        try {
+          restored.focus()
+        } catch {
+          // Focus is decorative; the draft restore still counts.
+        }
+      }
+    }
+  }
 }
 
 // Online only while the socket is open (issue #57): `reconnecting`
@@ -92,6 +128,11 @@ function sendInputText(root: HTMLElement): void {
     // echo and the text still lands in the log instead of dropping.
     const value = input.value
     input.value = ''
+    try {
+      input.focus()
+    } catch {
+      // Focus is decorative; the pre-clear still counts.
+    }
     void net.sendChat(value).then(
       (reply) => {
         if (isConnectionError(reply)) preserveLocal(value)
@@ -102,7 +143,20 @@ function sendInputText(root: HTMLElement): void {
     )
     return
   }
-  if (uiStore.getState().sendChat(input.value)) input.value = ''
+  const value = input.value
+  if (!uiStore.getState().sendChat(value)) return
+  // The store write above notifies synchronously: any draft-preserving
+  // repaint rebuilds #chat-root and detaches `input` first, so clear the
+  // live post-repaint node instead of the stale one (issue #93).
+  const live = root.querySelector<HTMLInputElement>('.chat-input')
+  if (live) {
+    live.value = ''
+    try {
+      live.focus()
+    } catch {
+      // Focus is decorative; the clear still counts.
+    }
+  }
 }
 
 // Secondary close affordances (issue #92): Escape and outside-click.

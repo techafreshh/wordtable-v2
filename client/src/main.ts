@@ -3,15 +3,12 @@
 // LocalGame, so turns, six-pass endings and rematch come from the engine;
 // this module only guards routes and paints the matching screen module.
 //
-// Coexistence with the placement Table (issues #7-9): the legacy
-// rack/pending/commit loop stays mounted on the `start` route alongside
-// the StartScreen (same #screen container, StartScreen first so its
-// `data-action="play"` wins global queries and the Table's scoped
-// `.table-actions` delegation still commits). `?rack/?seats/?turn` boot,
-// `fx.css`, and the game/ui store subscriptions are kept so a bare `/`
-// load still shows the rack, provisional chip, Recall/Shuffle, chat and
-// sounds. Hot-seat routes (#/setup, #/lobby, #/table, #/recap) render only
-// their screen module, keeping `.seat` counts exact for the loop probes.
+// The start route (issue #86) paints only the StartScreen (nickname +
+// Create/Join/Play now) with its own #toast node. Placement lives on the
+// session table (#/table, issue #85), so `?rack/?seats/?turn` boot only
+// seeds the hook-observable stores and never paints a board on `#/`.
+// Hot-seat routes (#/setup, #/lobby, #/table, #/recap) render only their
+// screen module, keeping `.seat` counts exact for the loop probes.
 
 import './styles/tokens.css'
 import './styles/board.css'
@@ -43,8 +40,7 @@ import {
 import { buildRecapHTML, mountRecap } from './components/Recap'
 import { buildToastHTML, mountToast } from './components/Toast'
 import { ensureReconnectOverlay } from './components/ReconnectOverlay'
-import { mountTable, renderTable, tableSkeletonHTML } from './components/Table'
-import { gameStore, displayFace, provScoreText } from './store/game'
+import { gameStore, boardToTiles, displayFace, provScoreText } from './store/game'
 import { DEFAULT_SEAT_NAMES, uiStore } from './store/ui'
 import { sessionStore } from './store/session'
 import {
@@ -129,17 +125,6 @@ function currentRoute(): Route {
   return parseRoute(window.location.hash)
 }
 
-// Legacy region repaint: only the `start` route hosts the Table, so
-// game/ui intents on hot-seat routes must not touch HotSeatTable's
-// `.board-host` (renderTable would overwrite committed tiles with the
-// placement board). Guarded by route, not by node presence.
-function repaintLegacyTable(): void {
-  if (currentRoute() !== 'start') return
-  const host = screenHost()
-  if (!host || !host.querySelector('.table')) return
-  renderTable(host)
-}
-
 // Route guards: #/table needs a live session, #/lobby needs one too
 // (a deep link with no session bounces to setup instead of painting an
 // empty lobby), #/recap needs an ended one. Anything unguarded falls
@@ -177,13 +162,15 @@ function render(): void {
   }
   switch (route) {
     case 'start': {
-      // StartScreen above the legacy Table: offline Create/Join toasts
-      // surface through the Table's own #toast node.
+      // Start route (issue #86): StartScreen only — no legacy Table.
+      // Offline Create/Join toasts surface through this route's own
+      // #toast node, mirroring the setup/lobby pattern.
       host.innerHTML =
-        buildStartScreenHTML(readNickname()) + tableSkeletonHTML()
+        buildStartScreenHTML(readNickname()) +
+        buildToastHTML(uiStore.getState().toast)
+      const toast = host.querySelector<HTMLElement>('#toast')
+      if (toast) mountToast(toast)
       mountStartScreen(host, () => navigate('setup'))
-      mountTable(host)
-      renderTable(host)
       break
     }
     case 'setup': {
@@ -331,6 +318,7 @@ declare global {
         chat: { from: string; text: string; ts: number }[]
         chatOpen: boolean
         unread: number
+        boardTiles: Record<string, string>
       }
       reset: () => void
       placeOnline: (tiles: PlacedTile[]) => Promise<NetReply>
@@ -352,7 +340,7 @@ declare global {
       placeTableMove: (specs: PlaceSpec[]) => IntentResult
       rematch: () => void
       snapshot: () => LocalSnapshot | null
-      startSession: (names: string[], bots?: boolean[]) => void
+      startSession: (names: string[], bots?: boolean[], seed?: number) => void
     }
   }
 }
@@ -402,6 +390,7 @@ function installHook(): void {
         chat: ui.chat.map((m) => ({ ...m })),
         chatOpen: ui.chatOpen,
         unread: ui.unread,
+        boardTiles: boardToTiles(state.board),
       }
     },
     reset: () => {
@@ -434,8 +423,8 @@ function installHook(): void {
       navigate('table')
     },
     snapshot: () => sessionStore.getState().snapshot(),
-    startSession: (names: string[], bots?: boolean[]) => {
-      sessionStore.getState().startSession(names, bots ?? [])
+    startSession: (names: string[], bots?: boolean[], seed?: number) => {
+      sessionStore.getState().startSession(names, bots ?? [], seed)
     },
   }
 }
@@ -446,9 +435,7 @@ function boot(): void {
   bootHudFromURL()
   app.innerHTML = '<div id="screen"></div>'
   startRouter(() => handleRoute())
-  gameStore.subscribe(repaintLegacyTable)
   gameStore.subscribe(repaintSessionTable)
-  uiStore.subscribe(repaintLegacyTable)
   uiStore.subscribe(repaintLobbyChat)
   uiStore.subscribe(repaintSessionTable)
   // Session intents (button passes, bot auto-pass, hook forcing) repaint

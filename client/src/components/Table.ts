@@ -70,7 +70,9 @@ export function buildFloatScoreHTML(points: number): string {
 
 let floatTimer: ReturnType<typeof setTimeout> | null = null
 
-function appendFloatScore(points: number): void {
+// Shared commit feedback (issue #85): the session table reuses the exact
+// float/slam behavior, so both stay exported with markup and timing intact.
+export function appendFloatScore(points: number): void {
   const layer = document.getElementById('float-layer')
   if (!layer) return
   if (floatTimer !== null) clearTimeout(floatTimer)
@@ -81,7 +83,7 @@ function appendFloatScore(points: number): void {
   }, 950)
 }
 
-function markCommitSlam(): void {
+export function markCommitSlam(): void {
   for (const el of Array.from(document.querySelectorAll('.tile.last-move'))) {
     el.classList.add('slam')
   }

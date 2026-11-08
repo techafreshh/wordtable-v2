@@ -231,6 +231,74 @@ input.seat-bot:disabled {
   letter-spacing: 0.02em;
 }
 
+/* Session placement table (issue #85): the Table.ts interaction stack
+ * runs inside .screen-table, so the rack, provisional chip, rack
+ * actions, commit row, float chip and blank picker get screen-local
+ * layout. Tile and chip visuals stay in board.css/hud.css. */
+.screen-table #prov-score {
+  display: inline-block;
+  min-height: 44px;
+  padding: 0.3rem 0.9rem;
+  border-radius: 999px;
+  background: var(--wood-dark);
+  color: var(--brass-hot);
+  border: 1px solid var(--brass);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}
+.screen-table #rack {
+  display: flex;
+  gap: 0.35rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  min-height: 44px;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-md);
+  background: var(--wood-dark);
+  border: 1px solid var(--brass);
+}
+.screen-table #rack[aria-disabled="true"] {
+  opacity: 0.55;
+}
+.screen-table #rack-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+}
+.screen-table #rack-actions button,
+.screen-table #commit-button {
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid var(--brass);
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  padding: 0.5rem 1rem;
+  font-family: var(--font-stack);
+  font-weight: 700;
+  background: var(--wood-dark);
+  color: var(--ivory-dim);
+}
+.screen-table .table-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.screen-table #commit-button {
+  background: var(--felt-bright);
+  color: var(--ivory);
+}
+.screen-table #float-layer {
+  pointer-events: none;
+}
+.screen-table #float-score {
+  font-variant-numeric: tabular-nums;
+}
+.screen-table #blank-picker {
+  align-items: center;
+}
+
 .podium {
   display: flex;
   flex-direction: column;

@@ -80,9 +80,65 @@ export function mountBlankPicker(pickerEl: HTMLElement): void {
     if (cancelBtn && pickerEl.contains(cancelBtn)) cancelPicker()
   })
 
+  // Dialog keyboard contract (matches role="dialog" aria-modal="true"):
+  // Escape cancels, Tab wraps focus among the sheet buttons.
+  pickerEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      cancelPicker()
+      return
+    }
+    if (e.key !== 'Tab') return
+    let buttons: HTMLElement[]
+    try {
+      const list = pickerEl.querySelectorAll(
+        '.picker-sheet button:not([disabled])',
+      )
+      buttons = Array.from(list) as HTMLElement[]
+    } catch {
+      return
+    }
+    if (buttons.length === 0) return
+    const first = buttons[0] as HTMLElement
+    const last = buttons[buttons.length - 1] as HTMLElement
+    const current = (e.target as HTMLElement | null) ?? null
+    if (e.shiftKey) {
+      if (current === first) {
+        e.preventDefault()
+        try {
+          last.focus()
+        } catch {
+          // Focus is decorative; the wrap still counts as handled.
+        }
+      }
+    } else if (current === last) {
+      e.preventDefault()
+      try {
+        first.focus()
+      } catch {
+        // Focus is decorative; the wrap still counts as handled.
+      }
+    }
+  })
+
+  // Autofocus the A button on the closed → open transition only; every
+  // repaint while open leaves focus alone. Guarded like StartScreen so
+  // fake-DOM hosts without focus support never throw.
+  let wasOpen = false
   const paint = (): void => {
-    if (uiStore.getState().blankPending) pickerEl.removeAttribute('hidden')
+    const open = uiStore.getState().blankPending !== null
+    if (open) pickerEl.removeAttribute('hidden')
     else pickerEl.setAttribute('hidden', '')
+    if (open && !wasOpen) {
+      try {
+        pickerEl
+          .querySelector<HTMLButtonElement>('button[data-letter="A"]')
+          ?.focus()
+      } catch {
+        // Focus is decorative; the sheet still opens.
+      }
+    }
+    wasOpen = open
   }
   paint()
   uiStore.subscribe(paint)

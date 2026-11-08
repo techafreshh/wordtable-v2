@@ -519,3 +519,42 @@ input.seat-bot:disabled {
 #online-table #exchange-button {
   min-height: 44px;
 }
+/* Exchange surface (issue #89): warm-club tokens, 44px targets. */
+#exchange-button:disabled,
+#exchange-confirm:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+#exchange-button,
+#exchange-confirm,
+#exchange-cancel {
+  min-height: 44px;
+}
+#bag-remaining {
+  color: var(--ivory-dim);
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+#exchange-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--brass);
+  border-radius: var(--radius-md);
+  background: var(--wood-dark);
+}
+#exchange-panel[hidden] {
+  display: none;
+}
+#exchange-panel .exchange-hint {
+  color: var(--ivory-dim);
+  font-size: 0.85rem;
+  margin: 0;
+}
+.tile.exchange-selected {
+  outline: 2px solid var(--brass);
+  outline-offset: -2px;
+}

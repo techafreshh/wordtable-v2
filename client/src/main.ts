@@ -414,6 +414,8 @@ declare global {
         started: boolean
       }
       pass: () => void
+      exchangeTiles: (faces: string[]) => IntentResult
+      exchangeOnline: (countOrFaces: number | string[]) => Promise<NetReply>
       placeTableMove: (specs: PlaceSpec[]) => IntentResult
       rematch: () => void
       snapshot: () => LocalSnapshot | null
@@ -488,6 +490,15 @@ function installHook(): void {
     pass: () => {
       sessionStore.getState().passTurn()
     },
+    // Exchange seams (issue #89): offline through the session intent
+    // (plus scratch resync), online straight to the server.
+    exchangeTiles: (faces: string[]) => {
+      const result = sessionStore.getState().exchangeTiles(faces)
+      syncGameFromSession()
+      return result
+    },
+    exchangeOnline: (countOrFaces: number | string[]) =>
+      net.exchange(countOrFaces),
     // Scripted session play (issue #85): engine-level commit for the
     // turn seat plus scratch resync, so a headless human→bot game runs
     // on the hook alone (placeTableMove → bot timer → snapshot).

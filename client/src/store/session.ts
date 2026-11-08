@@ -8,8 +8,10 @@
 import { createStore } from 'zustand/vanilla'
 import {
   LocalGame,
+  type IntentResult,
   type LocalEvent,
   type LocalSnapshot,
+  type PlaceSpec,
 } from '../../../shared/engine/local'
 import { GameStatus } from '../../../shared/engine/game'
 import { generateBotMove } from '../../../shared/engine/bot'
@@ -54,6 +56,7 @@ interface SessionState {
   version: number
   startSession: (names: string[], bots: boolean[], seed?: number) => void
   passTurn: () => void
+  placeMove: (specs: PlaceSpec[]) => IntentResult
   rematch: () => void
   snapshot: () => LocalSnapshot | null
   wordHistory: () => WordHistoryEntry[]
@@ -139,6 +142,19 @@ export const sessionStore = createStore<SessionState>()((set, get) => ({
     game = new LocalGame(clean, seed, isLegalWord)
     set({ names: clean, isBot: flags, version: get().version + 1 })
     armBotTimer()
+  },
+  // Commit path for the session table (issue #85): the engine validates
+  // and scores the current turn seat's placement. Human-only gating lives
+  // in the caller (the table ignores bot-turn input); a no-op session
+  // refuses with BAD_STATE so stray calls before setup never throw.
+  placeMove: (specs) => {
+    if (game === null) return { ok: false, reason: 'BAD_STATE' }
+    const result = game.place(game.getState().turn, specs)
+    if (result.ok) {
+      set({ version: get().version + 1 })
+      armBotTimer()
+    }
+    return result
   },
   // Pass for whichever seat holds the turn; a no-op without a session so
   // stray hook calls before setup never throw.

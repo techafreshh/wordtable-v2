@@ -16,6 +16,8 @@ import { buildLobbyHTML } from '../../client/src/components/Lobby'
 import {
   buildTableBoardHTML,
   buildHotSeatTableHTML,
+  sessionAllowsPlacement,
+  syncGameFromSession,
 } from '../../client/src/components/HotSeatTable'
 import { buildRecapHTML } from '../../client/src/components/Recap'
 import {
@@ -211,6 +213,48 @@ describe('hot-seat table builder', () => {
     expect(html).toContain('>0 - 0<')
     expect(html).toContain('id="pass-button"')
   })
+
+  it('renders the session placement skeleton around the strip', () => {
+    sessionStore.getState().startSession(['Ann', 'Bo'], [false, false])
+    syncGameFromSession()
+    const snap = sessionStore.getState().snapshot()
+    expect(snap).not.toBeNull()
+    if (snap === null) return
+    const html = buildHotSeatTableHTML(snap)
+    expect(html).toContain('class="screen screen-table"')
+    expect(count(/class="seat[ "]/g, html)).toBe(2)
+    expect(html).toContain('id="score-line"')
+    expect(html).toContain('>0 - 0<')
+    expect(html).toContain('id="turn-line"')
+    expect(count(/class="sq /g, html)).toBe(225)
+    expect(html).toContain('id="prov-score"')
+    expect(html).toContain('role="status"')
+    expect(html).toContain('>0 pts<')
+    expect(html).toContain('id="rack"')
+    expect(html).toContain('role="listbox"')
+    expect(count(/data-rack-index="/g, html)).toBe(7)
+    expect(html).toContain('id="rack-actions"')
+    expect(html).toContain('data-action="recall"')
+    expect(html).toContain('data-action="shuffle"')
+    expect(html).toContain('id="commit-button"')
+    expect(html).toContain('data-action="play"')
+    expect(html).toContain('id="pass-button"')
+    expect(html).toContain('id="float-layer"')
+    expect(html).toContain('id="blank-picker"')
+    expect(count(/data-letter="/g, html)).toBe(26)
+    expect(sessionAllowsPlacement()).toBe(true)
+  })
+
+  it('marks the rack inert on a bot-seat turn', () => {
+    sessionStore.getState().startSession(['Ann', 'Bo'], [false, true])
+    sessionStore.getState().passTurn()
+    syncGameFromSession()
+    const snap = sessionStore.getState().snapshot()
+    expect(snap?.turn).toBe(1)
+    expect(sessionAllowsPlacement()).toBe(false)
+    if (snap === null) return
+    expect(buildHotSeatTableHTML(snap)).toContain('aria-disabled="true"')
+  })
 })
 
 describe('recap builder', () => {
@@ -327,5 +371,23 @@ describe('screen stylesheets', () => {
   it('tightens the layout at 480px', () => {
     const screens = css(CLIENT_STYLES, 'screens.css')
     expect(screens).toContain('max-width: 480px')
+  })
+
+  it('ships the session placement layout on both style paths', () => {
+    for (const dir of [CLIENT_STYLES, SRC_STYLES]) {
+      const screens = css(dir, 'screens.css')
+      for (const marker of [
+        '.screen-table',
+        '#prov-score',
+        '#rack',
+        '#rack-actions',
+        '#commit-button',
+        '#float-layer',
+        '#float-score',
+        '#blank-picker',
+      ]) {
+        expect(screens).toContain(marker)
+      }
+    }
   })
 })

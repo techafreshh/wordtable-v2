@@ -26,6 +26,12 @@ import {
   shakeRack,
 } from './Rack'
 import { buildBlankPickerHTML, mountBlankPicker } from './BlankPicker'
+import {
+  buildExchangeHTML,
+  mountExchange,
+  offlineExchangeBlocked,
+  paintExchange,
+} from './Exchange'
 import { mountToast, showToastText } from './Toast'
 import { buildPlayerStripHTML } from './PlayerStrip'
 import { appendFloatScore, markCommitSlam } from './Table'
@@ -91,6 +97,7 @@ export function syncGameFromSession(): void {
 export function buildHotSeatTableHTML(snapshot: LocalSnapshot): string {
   const turnName = String(snapshot.names[snapshot.turn] ?? '')
   const state = gameStore.getState()
+  const ui = uiStore.getState()
   return (
     '<main class="screen screen-table">' +
     buildPlayerStripHTML(snapshot.names, snapshot.scores, snapshot.turn) +
@@ -105,6 +112,12 @@ export function buildHotSeatTableHTML(snapshot: LocalSnapshot): string {
     '<div class="table-actions">' +
     '<button type="button" id="commit-button" data-action="play">Play</button>' +
     '<button type="button" id="pass-button">Pass</button>' +
+    buildExchangeHTML(
+      snapshot.bagRemaining,
+      ui.exchangeSelected.length,
+      offlineExchangeBlocked() !== null,
+      ui.exchangeOpen,
+    ) +
     '</div>' +
     '<div id="float-layer" aria-hidden="true"></div>' +
     buildBlankPickerHTML() +
@@ -146,6 +159,7 @@ export function renderHotSeatTable(app: HTMLElement): void {
     if (sessionAllowsPlacement()) rack.removeAttribute('aria-disabled')
     else rack.setAttribute('aria-disabled', 'true')
   }
+  paintExchange(app, snap.bagRemaining, offlineExchangeBlocked() !== null)
 }
 
 // DOM paint for headless-safe commit paths: the stores stay authoritative
@@ -233,6 +247,14 @@ export function playCommitSession(): void {
 }
 
 function guardPlacement(e: Event): void {
+  // While the exchange panel is open, board/rack gestures (including
+  // drag-drop, which never passes through the tile-click funnel) must
+  // not place: selection toggles instead.
+  if (uiStore.getState().exchangeOpen) {
+    e.stopPropagation()
+    e.preventDefault()
+    return
+  }
   if (sessionAllowsPlacement()) return
   e.stopPropagation()
   e.preventDefault()
@@ -264,6 +286,23 @@ export function mountHotSeatTable(
     rack.addEventListener('dragstart', guardPlacement, true)
   }
   if (actions) mountRackActions(actions)
+  mountExchange(root, {
+    mode: 'offline',
+    onExchanged: () => {
+      syncGameFromSession()
+      if (typeof document === 'undefined') return
+      try {
+        const host = document.getElementById('screen')
+        if (host) renderHotSeatTable(host)
+        const after = sessionStore.getState().snapshot()
+        if (after === null || after.status !== GameStatus.PLAYING) {
+          navigate('recap')
+        }
+      } catch {
+        // Headless exchange: the stores stay authoritative.
+      }
+    },
+  })
   if (picker) mountBlankPicker(picker)
   if (toast) mountToast(toast)
   commit?.addEventListener('click', () => {

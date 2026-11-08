@@ -9,10 +9,21 @@ import { gameStore } from '../store/game'
 import { uiStore } from '../store/ui'
 import { buildTileHTML, setActiveDragIndex, setTileDragPayload } from './Tile'
 
+// Exchange highlight (issue #89): while the exchange panel is open the
+// picked rack indices render `exchange-selected` (aria-selected) without
+// touching the tap-tap `selected` cursor. Read straight from uiStore so
+// every table builder inherits the highlight with no signature change.
 export function buildRackTilesHTML(rack: Tile[], selectedRack: number | null): string {
+  const exchanging = uiStore.getState().exchangeOpen
+    ? new Set(uiStore.getState().exchangeSelected)
+    : null
   return rack
     .map((tile, i) =>
-      buildTileHTML(tile, { selected: selectedRack === i, rackIndex: i }),
+      buildTileHTML(tile, {
+        selected: selectedRack === i,
+        rackIndex: i,
+        exchange: exchanging?.has(i) === true,
+      }),
     )
     .join('')
 }

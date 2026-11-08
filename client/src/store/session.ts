@@ -57,6 +57,7 @@ interface SessionState {
   startSession: (names: string[], bots: boolean[], seed?: number) => void
   passTurn: () => void
   placeMove: (specs: PlaceSpec[]) => IntentResult
+  exchangeTiles: (faces: string[]) => IntentResult
   rematch: () => void
   snapshot: () => LocalSnapshot | null
   wordHistory: () => WordHistoryEntry[]
@@ -150,6 +151,19 @@ export const sessionStore = createStore<SessionState>()((set, get) => ({
   placeMove: (specs) => {
     if (game === null) return { ok: false, reason: 'BAD_STATE' }
     const result = game.place(game.getState().turn, specs)
+    if (result.ok) {
+      set({ version: get().version + 1 })
+      armBotTimer()
+    }
+    return result
+  },
+  // Exchange for whichever seat holds the turn (issue #89): faces swap
+  // through LocalGame (blanks ride as '?'), advancing the turn and
+  // refilling to 7. Engine refusals (EXCHANGE_GATE, BAD_TILES, ...) come
+  // back verbatim with no version bump, exactly like placeMove.
+  exchangeTiles: (faces) => {
+    if (game === null) return { ok: false, reason: 'BAD_STATE' }
+    const result = game.exchange(game.getState().turn, faces)
     if (result.ok) {
       set({ version: get().version + 1 })
       armBotTimer()

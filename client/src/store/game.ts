@@ -43,6 +43,10 @@ export interface StateSyncSnapshot {
 
 interface GameStoreState {
   rack: Tile[]
+  // Authoritative bag count from the last `state_sync` (online only):
+  // null until the first snapshot lands, cleared on reset/resetOnline.
+  // The offline loop reads the session snapshot instead.
+  bagRemaining: number | null
   pending: PendingTile[]
   selectedRack: number | null
   provScore: number
@@ -238,6 +242,7 @@ export const gameStore = createStore<GameStoreState>()((set, get) => {
 
   return {
     rack: [],
+    bagRemaining: null,
     pending: [],
     selectedRack: null,
     provScore: 0,
@@ -337,7 +342,7 @@ export const gameStore = createStore<GameStoreState>()((set, get) => {
       const returned: Tile[] = pending.map((p) => ({ face: p.face, isBlank: p.isBlank }))
       bag = new TileBag(1)
       commitState([...rack, ...returned], [], null)
-      set({ board: emptyGrid(), lastMove: [], lastScore: null })
+      set({ board: emptyGrid(), lastMove: [], lastScore: null, bagRemaining: null })
       // Offline loop owns the strip on this path: a board reset zeroes
       // seat totals (seats/turn/chat survive — no resetTable here).
       const { seats } = uiStore.getState()
@@ -386,9 +391,18 @@ export const gameStore = createStore<GameStoreState>()((set, get) => {
           }
         }
       }
+      // Bag line (issue #89): integer `bag_remaining` projects into
+      // the store; missing/non-finite values stay unknown (null) so the
+      // button gate treats the bag as full until the server says so.
+      const bagRaw = snapshot['bag_remaining']
+      const bag =
+        typeof bagRaw === 'number' && Number.isFinite(bagRaw)
+          ? Math.max(0, Math.trunc(bagRaw))
+          : null
       set({
         board: grid,
         rack: rack.slice(0, 7),
+        bagRemaining: bag,
         pending: [],
         selectedRack: null,
         provScore: 0,
@@ -422,6 +436,7 @@ export const gameStore = createStore<GameStoreState>()((set, get) => {
       set({
         board: emptyGrid(),
         rack: [],
+        bagRemaining: null,
         pending: [],
         selectedRack: null,
         provScore: 0,

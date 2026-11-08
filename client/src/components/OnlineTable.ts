@@ -17,6 +17,12 @@ import {
   mountRack,
   mountRackActions,
 } from './Rack'
+import {
+  buildExchangeHTML,
+  mountExchange,
+  onlineExchangeBlocked,
+  paintExchange,
+} from './Exchange'
 import { mountToast, showToastText } from './Toast'
 import {
   boardToTiles,
@@ -50,7 +56,12 @@ export function buildOnlineTableHTML(): string {
     '<div class="table-actions">' +
     '<button type="button" id="commit-button" data-action="play">Play</button>' +
     '<button type="button" id="pass-button">Pass</button>' +
-    '<button type="button" id="exchange-button" data-action="exchange">Exchange</button>' +
+    buildExchangeHTML(
+      state.bagRemaining,
+      ui.exchangeSelected.length,
+      onlineExchangeBlocked() !== null,
+      ui.exchangeOpen,
+    ) +
     '</div>' +
     '<div id="float-layer" aria-hidden="true"></div>' +
     buildBlankPickerHTML() +
@@ -89,6 +100,7 @@ export function renderOnlineTable(root: HTMLElement): void {
   if (rack) {
     rack.innerHTML = buildRackTilesHTML(state.rack, state.selectedRack)
   }
+  paintExchange(root, state.bagRemaining, onlineExchangeBlocked() !== null)
 }
 
 // Commit the game-store scratch through the server: blanks ride as
@@ -117,7 +129,6 @@ export function mountOnlineTable(root: HTMLElement): void {
   const actions = root.querySelector<HTMLElement>('#rack-actions')
   const commit = root.querySelector<HTMLElement>('#commit-button')
   const pass = root.querySelector<HTMLElement>('#pass-button')
-  const exchange = root.querySelector<HTMLElement>('#exchange-button')
   const picker = root.querySelector<HTMLElement>('#blank-picker')
   const toast = root.querySelector<HTMLElement>('#toast')
   if (boardHost) mountBoardInteractions(boardHost)
@@ -133,11 +144,24 @@ export function mountOnlineTable(root: HTMLElement): void {
       if (!reply.ok) showToastText(reply.error ?? 'BAD_REPLY')
     })
   })
-  exchange?.addEventListener('click', () => {
-    void net.exchange(1).then((reply) => {
-      if (!reply.ok) showToastText(reply.error ?? 'BAD_REPLY')
-    })
-  })
+  // The shared exchange panel replaces the old stub (a bare count of 1
+  // with no tile selection): Confirm sends the picked faces and the
+  // `state_sync` broadcast refills the rack.
+  mountExchange(root, { mode: 'online' })
+  // While the panel is open, board/rack gestures (click and drag-drop)
+  // must not place: rack taps toggle exchange selection instead.
+  const guardExchange = (e: Event): void => {
+    if (!uiStore.getState().exchangeOpen) return
+    e.stopPropagation()
+    e.preventDefault()
+  }
+  for (const [sel, types] of [
+    ['.board-host', ['click', 'drop', 'dragover']],
+    ['#rack', ['click', 'dragstart']],
+  ] as const) {
+    const node = root.querySelector<HTMLElement>(sel)
+    for (const type of types) node?.addEventListener(type, guardExchange, true)
+  }
   const chatRoot = root.querySelector<HTMLElement>('#chat-root')
   if (chatRoot) {
     mountChatBubble(chatRoot)

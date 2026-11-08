@@ -44,6 +44,8 @@ interface UiState {
   selectedRack: number | null
   toast: string | null
   blankPending: BlankPending | null
+  exchangeOpen: boolean
+  exchangeSelected: number[]
   seats: string[]
   scores: number[]
   turn: number
@@ -54,6 +56,9 @@ interface UiState {
   select: (sq: string | null) => void
   setScreen: (screen: Screen) => void
   selectRack: (index: number | null) => void
+  setExchangeOpen: (open: boolean) => void
+  toggleExchangeIndex: (index: number) => void
+  clearExchange: () => void
   showToast: (msg: string) => void
   clearToast: () => void
   openBlankPicker: (pending: BlankPending) => void
@@ -96,6 +101,8 @@ export const uiStore = createStore<UiState>()((set, get) => ({
   selectedRack: null,
   toast: null,
   blankPending: null,
+  exchangeOpen: false,
+  exchangeSelected: [],
   seats: [...DEFAULT_SEAT_NAMES],
   scores: [0, 0, 0, 0],
   turn: 0,
@@ -112,6 +119,25 @@ export const uiStore = createStore<UiState>()((set, get) => ({
     if (index !== null && (!Number.isInteger(index) || index < 0)) return
     set({ selectedRack: index })
   },
+  // Transient exchange selection (issue #89): rack indices multi-picked
+  // while the exchange panel is open. Closing the panel clears the
+  // selection; toggling dedupes, sorts and ignores bad indices.
+  setExchangeOpen: (open) => {
+    if (!open) set({ exchangeOpen: false, exchangeSelected: [] })
+    else set({ exchangeOpen: true })
+  },
+  toggleExchangeIndex: (index) => {
+    if (!Number.isInteger(index) || index < 0) return
+    set((s) => {
+      if (!s.exchangeOpen) return s
+      const has = s.exchangeSelected.includes(index)
+      const next = has
+        ? s.exchangeSelected.filter((i) => i !== index)
+        : [...s.exchangeSelected, index].sort((a, b) => a - b)
+      return { exchangeSelected: next }
+    })
+  },
+  clearExchange: () => set({ exchangeOpen: false, exchangeSelected: [] }),
   showToast: (msg) => {
     set({ toast: msg })
     armToastTimer(() => uiStore.getState().clearToast())
@@ -193,6 +219,8 @@ export const uiStore = createStore<UiState>()((set, get) => ({
   },
   resetTable: () => {
     set({
+      exchangeOpen: false,
+      exchangeSelected: [],
       seats: [...DEFAULT_SEAT_NAMES],
       scores: [0, 0, 0, 0],
       turn: 0,

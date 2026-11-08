@@ -9,6 +9,9 @@ import type { Tile } from '../../../shared/engine/bag'
 
 export interface TileRenderOpts {
   pending?: boolean
+  // Exchange-picked tiles (issue #89) outline in brass without taking
+  // the placement cursor: `selected` stays the tap-tap path.
+  exchange?: boolean
   selected?: boolean
   rackIndex?: number
   pendingId?: number
@@ -28,6 +31,7 @@ export function buildTileHTML(tile: Tile, opts: TileRenderOpts = {}): string {
   const classes = ['tile']
   if (opts.pending === true) classes.push('pending')
   if (opts.selected === true) classes.push('selected')
+  if (opts.exchange === true) classes.push('exchange-selected')
   if (opts.lastMove === true) classes.push('last-move')
   // A designated blank shows its picker letter but stays a blank (value
   // 0); an undesignated blank shows '?'. data-blank marks blanks so the
@@ -41,7 +45,7 @@ export function buildTileHTML(tile: Tile, opts: TileRenderOpts = {}): string {
   if (tile.isBlank) attrs += ' data-blank="true"'
   if (opts.rackIndex !== undefined) attrs += ` data-rack-index="${opts.rackIndex}"`
   if (opts.pendingId !== undefined) attrs += ` data-pending-id="${opts.pendingId}"`
-  if (opts.selected === true) attrs += ' aria-selected="true"'
+  if (opts.selected === true || opts.exchange === true) attrs += ' aria-selected="true"'
   return `<div ${attrs}>${esc(face)}</div>`
 }
 
@@ -87,6 +91,7 @@ export function mountTileAttrs(el: HTMLElement, tile: Tile, opts: TileRenderOpts
   el.classList.add('tile')
   el.classList.toggle('pending', opts.pending === true)
   el.classList.toggle('selected', opts.selected === true)
+  el.classList.toggle('exchange-selected', opts.exchange === true)
   el.classList.toggle('last-move', opts.lastMove === true)
   el.setAttribute('draggable', opts.draggable === false ? 'false' : 'true')
   const designated = (tile.blankAs ?? '').trim().toUpperCase()
@@ -95,6 +100,7 @@ export function mountTileAttrs(el: HTMLElement, tile: Tile, opts: TileRenderOpts
   else delete el.dataset.blank
   if (opts.rackIndex !== undefined) el.dataset.rackIndex = String(opts.rackIndex)
   if (opts.pendingId !== undefined) el.dataset.pendingId = String(opts.pendingId)
-  if (opts.selected === true) el.setAttribute('aria-selected', 'true')
+  if (opts.selected === true || opts.exchange === true) el.setAttribute('aria-selected', 'true')
+  else el.removeAttribute('aria-selected')
   el.style.touchAction = 'none'
 }

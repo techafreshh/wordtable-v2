@@ -167,6 +167,30 @@
   cursor: pointer;
 }
 
+.chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.chat-title {
+  color: var(--ivory);
+  font-weight: 700;
+}
+
+.chat-header button[data-action="close-chat"] {
+  border: 1px solid var(--brass);
+  border-radius: var(--radius-sm);
+  background: var(--wood-dark);
+  color: var(--ivory);
+  font-family: var(--font-stack);
+  font-size: 1.1rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0.4rem 0.6rem;
+  cursor: pointer;
+}
+
 .chat-input-row {
   display: flex;
   gap: 0.5rem;
@@ -211,5 +235,6 @@
   .seat { padding: 0.3rem 0.55rem; font-size: 0.85rem; }
   #timer-ring { width: 22px; height: 22px; }
   #chat-bubble { right: 0.75rem; bottom: 0.75rem; }
-  #chat-panel { right: 0.75rem; bottom: 4rem; }
+  #chat-panel { left: 0.75rem; right: 0.75rem; width: auto; top: 0.75rem; bottom: auto; max-height: 44dvh; overflow: hidden; }
+  #chat-log { max-height: 20dvh; }
 }

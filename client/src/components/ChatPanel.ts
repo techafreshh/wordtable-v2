@@ -36,6 +36,8 @@ export function buildChatPanelHTML(chat: ChatMessage[], open: boolean): string {
   ).join('')
   return (
     `<div id="chat-panel"${open ? '' : ' hidden'}>` +
+    '<div class="chat-header"><span class="chat-title">Chat</span>' +
+    '<button type="button" data-action="close-chat" aria-label="Close chat">×</button></div>' +
     `<div id="chat-log" role="log" aria-label="Chat log">${rows}</div>` +
     `<div class="emote-row" role="group" aria-label="Emotes">${emotes}</div>` +
     '<div class="chat-input-row">' +
@@ -103,11 +105,80 @@ function sendInputText(root: HTMLElement): void {
   if (uiStore.getState().sendChat(input.value)) input.value = ''
 }
 
+// Secondary close affordances (issue #92): Escape and outside-click.
+// Registered once per page (same idempotence idiom as dataset.panelMounted
+// above); clicks inside #chat-root (bubble or panel) never close. The
+// try/catch keeps fake-DOM hosts without a document from throwing.
+let chatGlobalMounted = false
+
+function mountChatGlobals(): void {
+  if (chatGlobalMounted) return
+  chatGlobalMounted = true
+  try {
+    const doc = (
+      globalThis as unknown as {
+        document?: {
+          addEventListener: (
+            type: string,
+            fn: (e: unknown) => void,
+            opts?: unknown,
+          ) => void
+        }
+      }
+    ).document
+    if (!doc || typeof doc.addEventListener !== 'function') return
+    // Capture phase: the panel/bubble repaint replaces #chat-root innerHTML
+    // synchronously on toggle, detaching the click target mid-dispatch, so a
+    // bubble-phase outside-click check would misread the detached target as
+    // outside and snap the panel shut again. Capture runs first, while the
+    // target is still attached, so the #chat-root test stays exact.
+    doc.addEventListener(
+      'click',
+      (e) => {
+        try {
+          if (!uiStore.getState().chatOpen) return
+          const target = (e as { target?: unknown }).target as
+            | { closest?: (selector: string) => unknown }
+            | null
+            | undefined
+          if (target?.closest?.('#chat-root')) return
+          uiStore.getState().setChatOpen(false)
+        } catch {
+          // Best-effort like every other store touch in this file.
+        }
+      },
+      true,
+    )
+    doc.addEventListener('keydown', (e) => {
+      try {
+        if ((e as { key?: string }).key !== 'Escape') return
+        if (!uiStore.getState().chatOpen) return
+        try {
+          ;(e as { preventDefault?: () => void }).preventDefault?.()
+        } catch {
+          // Focus handling is decorative; the close still counts.
+        }
+        uiStore.getState().setChatOpen(false)
+      } catch {
+        // Best-effort like every other store touch in this file.
+      }
+    })
+  } catch {
+    // No document (hermetic tests): the panel-level handlers still work.
+  }
+}
+
 export function mountChatPanel(el: HTMLElement): void {
   if (el.dataset.panelMounted === '1') return
   el.dataset.panelMounted = '1'
+  mountChatGlobals()
   el.addEventListener('click', (e) => {
     const target = e.target as HTMLElement
+    const close = target.closest?.('[data-action="close-chat"]')
+    if (close && el.contains(close)) {
+      uiStore.getState().setChatOpen(false)
+      return
+    }
     const emote = target.closest?.('[data-emote]')
     if (emote && el.contains(emote)) {
       const value = emote.getAttribute('data-emote') ?? ''

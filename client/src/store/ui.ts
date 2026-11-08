@@ -67,6 +67,7 @@ interface UiState {
   setScores: (scores: number[]) => void
   setTurn: (index: number) => void
   toggleChat: () => void
+  setChatOpen: (open: boolean) => void
   sendChat: (text: string) => boolean
   receiveChat: (from: string, text: string) => boolean
   resetTable: () => void
@@ -191,6 +192,14 @@ export const uiStore = createStore<UiState>()((set, get) => ({
     set((s) => ({
       chatOpen: !s.chatOpen,
       unread: !s.chatOpen ? 0 : s.unread,
+    }))
+  },
+  // Explicit setter for the panel close affordances (issue #92):
+  // opening clears the badge, closing preserves it, mirroring toggleChat.
+  setChatOpen: (open) => {
+    set((s) => ({
+      chatOpen: open,
+      unread: open ? 0 : s.unread,
     }))
   },
   // Local-echo send: trim, reject blank, truncate to 200 chars.

@@ -15,10 +15,12 @@ import {
 } from '../../client/src/components/Board'
 import { buildBlankPickerHTML } from '../../client/src/components/BlankPicker'
 import { buildToastHTML } from '../../client/src/components/Toast'
+import { buildFloatScoreHTML } from '../../client/src/components/FloatScore'
+import { buildHotSeatTableHTML, syncGameFromSession } from '../../client/src/components/HotSeatTable'
 import {
-  buildFloatScoreHTML,
-  tableSkeletonHTML,
-} from '../../client/src/components/Table'
+  resetSessionForTests,
+  sessionStore,
+} from '../../client/src/store/session'
 
 function count(re: RegExp, html: string): number {
   return (html.match(re) ?? []).length
@@ -85,11 +87,20 @@ describe('Blank picker contract', () => {
   })
 
   it('the served skeleton mounts the contract nodes', () => {
-    const html = tableSkeletonHTML()
-    for (const id of ['#blank-picker', '#toast', '#float-layer', '#prov-score', '#rack']) {
-      expect(html).toContain(`id="${id.slice(1)}"`)
+    sessionStore.getState().startSession(['Ann', 'Bo'], [false, false])
+    syncGameFromSession()
+    const snap = sessionStore.getState().snapshot()
+    expect(snap).not.toBeNull()
+    if (snap === null) return
+    try {
+      const html = buildHotSeatTableHTML(snap)
+      for (const id of ['#blank-picker', '#float-layer', '#prov-score', '#rack']) {
+        expect(html).toContain(`id="${id.slice(1)}"`)
+      }
+      expect(count(/data-letter="/g, html)).toBe(26)
+    } finally {
+      resetSessionForTests()
     }
-    expect(count(/data-letter="/g, html)).toBe(26)
   })
 })
 

@@ -1,5 +1,5 @@
 // Hot-seat table (issue #10, placement loop issue #85) — the session
-// snapshot over the Board grid with the full Table.ts placement stack:
+// snapshot over the Board grid with the full session placement stack:
 // the game store is pending/selection scratch synced from the session
 // snapshot, LocalGame stays the commit authority. Bot seats resolve
 // through the session auto-pass timer; humans place via tap-tap and
@@ -34,7 +34,7 @@ import {
 } from './Exchange'
 import { mountToast, showToastText } from './Toast'
 import { buildPlayerStripHTML } from './PlayerStrip'
-import { appendFloatScore, markCommitSlam } from './Table'
+import { appendFloatScore, markCommitSlam } from './FloatScore'
 import { displayFace, gameStore, provScoreText } from '../store/game'
 import { uiStore } from '../store/ui'
 import { sessionStore } from '../store/session'
@@ -174,7 +174,7 @@ function paintSessionTable(): void {
   }
 }
 
-// Play handler, mirroring Table.ts playCommit branch for branch: snapshot
+// Play handler, mirroring the legacy playCommit branch for branch (see FloatScore.ts): snapshot
 // refusal copy up front, BLANK_NO_LETTER reopens the picker, EMPTY_MOVE is
 // silent, NOT_IN_LEXICON toasts `Not in my book: WORD` with slide-back and
 // shake, geometry refusals slide back with a silent shake.

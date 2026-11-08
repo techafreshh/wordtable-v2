@@ -1,5 +1,5 @@
 // Session table proofs (issue #85): the offline hot-seat table renders a
-// 7-tile rack and places through the shared Table.ts stack with the
+// 7-tile rack and places through the shared FloatScore feedback over the
 // session engine as commit authority. Headless by design: every proof runs
 // through the UI stores alone (sessionStore + gameStore + uiStore) with no
 // DOM, exactly like the scripted black-box probes.
@@ -23,7 +23,7 @@ import {
   syncGameFromSession,
 } from '../../client/src/components/HotSeatTable'
 import { buildBoardHTMLWithPending } from '../../client/src/components/Board'
-import { buildFloatScoreHTML } from '../../client/src/components/Table'
+import { buildFloatScoreHTML } from '../../client/src/components/FloatScore'
 import { tileValue } from '../../shared/engine/bag'
 import { GameStatus, GameEndReason } from '../../shared/engine/game'
 import type { BoardGrid } from '../../shared/engine/rules'

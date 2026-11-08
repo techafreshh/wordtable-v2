@@ -163,17 +163,22 @@ export function mountExchange(
   root.querySelector<HTMLElement>('#exchange-confirm')?.addEventListener('click', () => {
     confirmExchange(opts)
   })
-  // Capture-phase rack tap on the root: while the panel is open, tile
-  // clicks toggle exchange selection instead of placement. Root-level
-  // capture runs before the rack bubble handlers and the bot-turn guards,
-  // so a stopped event never reaches placement.
-  root.addEventListener(
+  // Capture-phase rack tap on the FRESH `#rack` node (rebuilt on every
+  // full `innerHTML` render, exactly like HotSeatTable's guardPlacement):
+  // while the panel is open, tile clicks toggle exchange selection
+  // instead of placement. Scoping to `#rack` keeps the listener on a
+  // node that is discarded with each render, so re-mounts never stack
+  // duplicate toggles on the persistent `#screen` host (two stacked
+  // toggles would cancel and selection would never stick). Capture runs
+  // before the rack bubble handlers, so a stopped event never reaches
+  // placement.
+  const rackNode = root.querySelector<HTMLElement>('#rack')
+  rackNode?.addEventListener(
     'click',
     (e) => {
       if (!uiStore.getState().exchangeOpen) return
       const tile = (e.target as HTMLElement).closest?.('.tile')
-      const rack = root.querySelector<HTMLElement>('#rack')
-      if (!tile || !rack || !rack.contains(tile)) return
+      if (!tile || !rackNode.contains(tile)) return
       const raw = tile.getAttribute('data-rack-index')
       if (raw === null) return
       const index = Number(raw)
@@ -190,14 +195,10 @@ export function mountExchange(
     },
     true,
   )
-  // Live repaint: selection/rack/bag/turn changes move the button, the
-  // bag line, the panel and the confirm count without replacing mounts.
-  const paint = (): void => {
-    paintExchange(root, currentBag(opts.mode), blocked() !== null)
-  }
-  paint()
-  uiStore.subscribe(paint)
-  gameStore.subscribe(paint)
-  if (opts.mode === 'online') netStore.subscribe(paint)
-  else sessionStore.subscribe(paint)
+  // Live paint for this mount only. No store subscriptions here: the
+  // table-level patch paths (`renderHotSeatTable`/`renderOnlineTable`
+  // via the main.ts repaint hooks) already repaint these nodes on every
+  // store change, and subscribing here would stack one closure per
+  // mount on the persistent host.
+  paintExchange(root, currentBag(opts.mode), blocked() !== null)
 }

@@ -25,7 +25,6 @@ import {
   resetNetForTests,
   stopReconnect,
 } from '../../client/src/store/net'
-import { tableSkeletonHTML } from '../../client/src/components/Table'
 import { RoomRegistry } from '../../server/src/rooms'
 import { createBinding } from '../../server/src/binding'
 
@@ -201,10 +200,16 @@ describe('reconnect overlay markup', () => {
     expect(buildReconnectOverlayHTML(true, 2)).toContain('3')
   })
 
-  it('ships in the table skeleton beside the toast node', () => {
-    const html = tableSkeletonHTML()
+  it('ships beside the toast node on every live route paint', () => {
+    const html = buildReconnectOverlayHTML(true, 0)
     expect(html).toContain('id=\"reconnect-overlay\"')
-    expect(html).toContain('id=\"toast\"')
+    expect(html).toContain('Reconnecting')
+    expect(html).toContain('role=\"status\"')
+    const main = readFileSync(
+      new URL('../../client/src/main.ts', import.meta.url),
+      'utf8',
+    )
+    expect(main).toContain('ensureReconnectOverlay(host)')
   })
 
   it('both screens.css copies style #reconnect-overlay with a hidden rule', () => {

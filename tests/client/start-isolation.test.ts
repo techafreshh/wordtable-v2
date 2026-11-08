@@ -5,7 +5,9 @@
 // (vitest has no DOM environment).
 
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { buildStartScreenHTML } from '../../client/src/components/StartScreen'
 
 const REPO_ROOT = new URL('../../', import.meta.url)
@@ -58,5 +60,40 @@ describe('start route isolation in main.ts', () => {
     expect(block).not.toContain('mountTable')
     expect(block).not.toContain('renderTable')
     expect(block).not.toContain('repaintLegacyTable')
+  })
+})
+
+// No-return guard (issue #96): the dead Table.ts surface stays deleted —
+// no module under client/src may re-import it, mirroring the
+// bundle.test.ts src()/root() idiom.
+function clientFiles(dir: string, out: string[] = []): string[] {
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry)
+    if (statSync(full).isDirectory()) clientFiles(full, out)
+    else if (full.endsWith('.ts')) out.push(full)
+  }
+  return out
+}
+
+describe('no legacy Table return guard', () => {
+  it('no module under client/src imports ./Table', () => {
+    const root = fileURLToPath(new URL('client/src/', REPO_ROOT))
+    const offenders: string[] = []
+    for (const file of clientFiles(root)) {
+      const text = readFileSync(file, 'utf8')
+      if (
+        text.includes("from './Table'") ||
+        text.includes('from "./Table"')
+      ) {
+        offenders.push(file)
+      }
+    }
+    expect(offenders).toEqual([])
+  })
+
+  it('client/src/components/Table.ts no longer resolves', () => {
+    expect(
+      existsSync(new URL('client/src/components/Table.ts', REPO_ROOT)),
+    ).toBe(false)
   })
 })

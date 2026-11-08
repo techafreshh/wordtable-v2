@@ -28,6 +28,10 @@ export interface NetState {
   code: string | null
   token: string | null
   seat: number | null
+  // True once the server's `started` flag (or a `start_game` accept)
+  // flips the room live. The lobby watches it to auto-advance to the
+  // online table; create/join/disconnect clear it for a fresh room.
+  started: boolean
   // Redial position shown by the reconnect overlay: 0-based count of
   // failed attempts since the drop. Mirrors the module `reconnectAttempt`
   // so DOM subscribers repaint without touching socket internals.
@@ -274,6 +278,9 @@ export function handleFrame(frame: Record<string, unknown>): void {
         uiStore.getState().setSeats(ranked.map((r) => r.name))
       }
     }
+    if (frame['started'] === true) {
+      if (netStore.getState().started !== true) netStore.setState({ started: true })
+    }
     if (Array.isArray(frame['scores'])) {
       uiStore.getState().setScores(frame['scores'] as number[])
     }
@@ -486,6 +493,7 @@ export const netStore = createStore<NetState>()(() => ({
   code: null,
   token: null,
   seat: null,
+  started: false,
   reconnectAttempt: 0,
 }))
 
@@ -509,7 +517,11 @@ function adoptSeat(reply: Record<string, unknown>): NetReply {
     return { ok: false, error: 'BAD_REPLY' }
   }
   persistNet(code, token)
-  netStore.setState({ code, token, seat: seatOf(reply) ?? 0 })
+  // A fresh seat means a fresh room: the lobby waits on the server's
+  // next `started:true` (via handleFrame) before advancing. Rejoin
+  // repaints through the same accept path, then its state_sync restores
+  // the flag when the game is already live.
+  netStore.setState({ code, token, seat: seatOf(reply) ?? 0, started: false })
   return { ...reply, ok: true }
 }
 
@@ -603,7 +615,7 @@ export const net = {
       }
     }
     failAll('DISCONNECTED')
-    netStore.setState({ status: 'offline', reconnectAttempt: 0 })
+    netStore.setState({ status: 'offline', reconnectAttempt: 0, started: false })
     paintReconnectOverlay()
   },
 
@@ -691,7 +703,19 @@ export const net = {
   startGame(): Promise<NetReply> {
     const auth = authFields()
     if (auth === null) return Promise.resolve({ ok: false, error: 'NO_ROOM' })
-    return sendRequest({ v: 1, m: 'start_game', ...auth })
+    return sendRequest({ v: 1, m: 'start_game', ...auth }).then((reply) => {
+      if (reply.ok) netStore.setState({ started: true })
+      return reply
+    })
+  },
+
+  // Host-only bot seat (issue #88): `add_bot` seats Botgomery per the
+  // frozen protocol. Auth-guarded like every other intent; the reply's
+  // `seats_info` repaints the lobby through the shared handleFrame path.
+  addBot(): Promise<NetReply> {
+    const auth = authFields()
+    if (auth === null) return Promise.resolve({ ok: false, error: 'NO_ROOM' })
+    return sendRequest({ v: 1, m: 'add_bot', ...auth })
   },
 
   placeTiles(tiles: PlacedTile[]): Promise<NetReply> {
@@ -795,6 +819,7 @@ export function resetNetForTests(): void {
     code: null,
     token: null,
     seat: null,
+    started: false,
     reconnectAttempt: 0,
   })
 }

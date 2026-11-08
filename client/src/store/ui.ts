@@ -4,7 +4,14 @@
 import { createStore } from 'zustand/vanilla'
 import { truncateChatText } from '../../../shared/engine/chat-text'
 
-export type Screen = 'start' | 'setup' | 'lobby' | 'table' | 'recap'
+export type Screen =
+  | 'start'
+  | 'setup'
+  | 'lobby'
+  | 'table'
+  | 'recap'
+  | 'online-lobby'
+  | 'online-table'
 
 // A blank tile awaiting its letter: tap-tile→tap-square (or a drop) parks
 // the placement here and opens #blank-picker instead of adding an

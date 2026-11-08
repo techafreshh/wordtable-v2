@@ -65,6 +65,7 @@ interface GameStoreState {
   // server's authoritative snapshot (see StateSyncSnapshot above).
   applyStateSync: (snapshot: StateSyncSnapshot) => void
   // Leave an online room: drop the authoritative board/rack.
+  syncFromSession: (board: BoardGrid, rack: Tile[]) => void
   resetOnline: () => void
   // Validate pending against the lexicon; on success write the board, mark
   // lastMove and refill the rack, on refusal (except BLANK_NO_LETTER)
@@ -96,9 +97,17 @@ function toPlacements(pending: PendingTile[]): Placement[] {
   })
 }
 
-function provisional(pending: PendingTile[]): { score: number; words: string[] } {
+// Provisional chip (issue #85): pending validates against the live board,
+// not an empty grid, so a second-word placement scores against committed
+// tiles while the lexicon stays permissive (the commit path re-checks
+// with the real lexicon). The board is passed in because the session
+// table syncs it from the engine snapshot before every placement.
+function provisional(
+  board: BoardGrid,
+  pending: PendingTile[],
+): { score: number; words: string[] } {
   if (pending.length === 0) return { score: 0, words: [] }
-  const result = validateMove(emptyGrid(), toPlacements(pending), () => true)
+  const result = validateMove(board, toPlacements(pending), () => true)
   if (!result.ok) return { score: 0, words: [] }
   return { score: result.score, words: [...result.words] }
 }
@@ -189,7 +198,7 @@ export const gameStore = createStore<GameStoreState>()((set, get) => {
     pending: PendingTile[],
     selectedRack: number | null,
   ): void {
-    const { score, words } = provisional(pending)
+    const { score, words } = provisional(get().board, pending)
     set({ rack, pending, selectedRack, provScore: score, provWords: words })
   }
 
@@ -306,13 +315,13 @@ export const gameStore = createStore<GameStoreState>()((set, get) => {
     },
 
     shuffle: () => {
-      const { rack, pending, selectedRack } = get()
+      const { rack, pending, selectedRack, board } = get()
       const next = [...rack]
       for (let i = next.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1))
         ;[next[i], next[j]] = [next[j], next[i]]
       }
-      const { score, words } = provisional(pending)
+      const { score, words } = provisional(board, pending)
       set({
         rack: next,
         provScore: score,
@@ -384,6 +393,24 @@ export const gameStore = createStore<GameStoreState>()((set, get) => {
       })
     },
 
+    // Session projection (issue #85): install the engine snapshot's board
+    // and turn-seat rack as the placement scratch. Pending, selection and
+    // the provisional chip clear (a turn change or commit leaves nothing
+    // in flight); lastMove/lastScore are preserved so the caller can set
+    // them from the commit result after syncing.
+    syncFromSession: (board: BoardGrid, rack: Tile[]) => {
+      const grid = board.map((row) =>
+        row.map((cell) => (cell === null ? null : { ...cell })),
+      )
+      set({
+        board: grid,
+        rack: rack.slice(0, 7).map((t) => ({ ...t })),
+        pending: [],
+        selectedRack: null,
+        provScore: 0,
+        provWords: [],
+      })
+    },
     // Leave an online room: drop the authoritative board/rack without
     // touching the offline bag, so a later offline loop redeals fresh.
     resetOnline: () => {

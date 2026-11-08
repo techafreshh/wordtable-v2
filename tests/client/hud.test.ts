@@ -217,6 +217,16 @@ describe('HUD stylesheets', () => {
     }
   })
 
+  it('keeps both hud.css bodies byte-identical below the header comment', () => {
+    const stripHeader = (src: string): string =>
+      src.replace(/^\/\*[\s\S]*?\*\/\s*/, '')
+    const strippedCanonical = stripHeader(css(CLIENT_STYLES, 'hud.css'))
+    const strippedBundled = stripHeader(css(SRC_STYLES, 'hud.css'))
+    expect(strippedCanonical.length).toBeGreaterThan(0)
+    expect(strippedBundled.length).toBeGreaterThan(0)
+    expect(strippedCanonical).toBe(strippedBundled)
+  })
+
   it('keeps the active glow brass without new keyframes', () => {
     const hud = css(CLIENT_STYLES, 'hud.css')
     expect(hud).toContain('box-shadow')

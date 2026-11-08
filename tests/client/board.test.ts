@@ -130,4 +130,23 @@ describe('Board stylesheets', () => {
     const board = css(CLIENT_STYLES, 'board.css')
     expect(board).toContain('linear-gradient(')
   })
+
+  it('gives phone boards a 44px floor with tuned touch-action', () => {
+    for (const dir of [CLIENT_STYLES, SRC_STYLES]) {
+      const board = css(dir, 'board.css')
+      for (const marker of [
+        '@media (max-width: 430px)',
+        '.board-host',
+        '720px',
+        'touch-action',
+        'manipulation',
+        'pan-x pan-y',
+        'overscroll-behavior',
+        'scroll-snap-type',
+        'scroll-snap-align',
+      ]) {
+        expect(board).toContain(marker)
+      }
+    }
+  })
 })

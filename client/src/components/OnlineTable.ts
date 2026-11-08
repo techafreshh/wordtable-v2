@@ -108,9 +108,10 @@ export function playCommitOnline(): void {
 }
 
 export function mountOnlineTable(root: HTMLElement): void {
-  if (root.dataset.onlineTableMounted === '1') return
-  root.dataset.onlineTableMounted = '1'
-
+  // No per-root mount guard: the #screen host persists across route
+  // paints while its children are rebuilt, so every paint must re-mount
+  // the fresh board/rack/buttons (per-child guards stay idempotent).
+  // A root early-return would leave the second visit's nodes dead.
   const boardHost = root.querySelector<HTMLElement>('.board-host')
   const rack = root.querySelector<HTMLElement>('#rack')
   const actions = root.querySelector<HTMLElement>('#rack-actions')

@@ -91,7 +91,9 @@ function closeJoinModal(root: HTMLElement): void {
 }
 
 function setOnlineBusy(root: HTMLElement, busy: boolean): void {
-  for (const action of ['create', 'join'] as const) {
+  // Play-now also locks mid-dial so a Create click hijacked by a late
+  // navigate cannot strand the user on the wrong route.
+  for (const action of ['create', 'join', 'play'] as const) {
     const button = root.querySelector<HTMLButtonElement>(`[data-action="${action}"]`)
     if (button) button.disabled = busy
   }

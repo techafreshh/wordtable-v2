@@ -117,35 +117,53 @@ function fallbackSelect(root: HTMLElement): void {
 }
 
 export function mountOnlineLobby(root: HTMLElement): void {
-  if (root.dataset.onlineLobbyMounted === '1') return
-  root.dataset.onlineLobbyMounted = '1'
+  // The #screen host persists across route paints (innerHTML swaps the
+  // children but keeps the host dataset), so root delegation + store
+  // subscriptions attach once while the fresh per-paint children mount
+  // every call — otherwise a revisit leaves dead chat/buttons behind.
+  if (root.dataset.onlineLobbyMounted !== '1') {
+    root.dataset.onlineLobbyMounted = '1'
+    root.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement
+      if (target.closest?.('#copy-link') && root.contains(target)) {
+        copyInvite(root)
+        return
+      }
+      if (target.closest?.('#leave-online') && root.contains(target)) {
+        net.disconnect()
+        gameStore.getState().resetOnline()
+        navigate('start')
+        return
+      }
+      if (target.closest?.('#add-bot') && root.contains(target)) {
+        void net.addBot().then((reply) => {
+          if (!reply.ok) uiStore.getState().showToast(reply.error ?? 'BAD_REPLY')
+          else renderOnlineLobby(root)
+        })
+        return
+      }
+      if (target.closest?.('#online-start') && root.contains(target)) {
+        void net.startGame().then((reply) => {
+          if (!reply.ok) uiStore.getState().showToast(reply.error ?? 'BAD_REPLY')
+          else navigate('online-table')
+        })
+      }
+    })
 
-  root.addEventListener('click', (e) => {
-    const target = e.target as HTMLElement
-    if (target.closest?.('#copy-link') && root.contains(target)) {
-      copyInvite(root)
-      return
+    const repaint = (): void => {
+      renderOnlineLobby(root)
+      const nextChatRoot = root.querySelector<HTMLElement>('#chat-root')
+      if (nextChatRoot) {
+        const ui = uiStore.getState()
+        const next =
+          buildChatBubbleHTML(ui.unread, ui.chatOpen) +
+          buildChatPanelHTML(ui.chat, ui.chatOpen)
+        if (nextChatRoot.innerHTML !== next) nextChatRoot.innerHTML = next
+      }
     }
-    if (target.closest?.('#leave-online') && root.contains(target)) {
-      net.disconnect()
-      gameStore.getState().resetOnline()
-      navigate('start')
-      return
-    }
-    if (target.closest?.('#add-bot') && root.contains(target)) {
-      void net.addBot().then((reply) => {
-        if (!reply.ok) uiStore.getState().showToast(reply.error ?? 'BAD_REPLY')
-        else renderOnlineLobby(root)
-      })
-      return
-    }
-    if (target.closest?.('#online-start') && root.contains(target)) {
-      void net.startGame().then((reply) => {
-        if (!reply.ok) uiStore.getState().showToast(reply.error ?? 'BAD_REPLY')
-        else navigate('online-table')
-      })
-    }
-  })
+    netStore.subscribe(repaint)
+    uiStore.subscribe(repaint)
+  }
 
   const chatRoot = root.querySelector<HTMLElement>('#chat-root')
   if (chatRoot) {
@@ -154,18 +172,4 @@ export function mountOnlineLobby(root: HTMLElement): void {
   }
   const toast = root.querySelector<HTMLElement>('#toast')
   if (toast) mountToast(toast)
-
-  const repaint = (): void => {
-    renderOnlineLobby(root)
-    const nextChatRoot = root.querySelector<HTMLElement>('#chat-root')
-    if (nextChatRoot) {
-      const ui = uiStore.getState()
-      const next =
-        buildChatBubbleHTML(ui.unread, ui.chatOpen) +
-        buildChatPanelHTML(ui.chat, ui.chatOpen)
-      if (nextChatRoot.innerHTML !== next) nextChatRoot.innerHTML = next
-    }
-  }
-  netStore.subscribe(repaint)
-  uiStore.subscribe(repaint)
 }

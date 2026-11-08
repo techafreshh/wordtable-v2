@@ -35,20 +35,34 @@ function expectNoUncaught(errors: string[]): void {
   expect(errors.filter((m) => m.includes('Uncaught'))).toEqual([])
 }
 
-test('offline tap-tap walk commits HELLO', async ({ page }) => {
+test('offline tap-tap walk commits CAT on the session table', async ({ page }) => {
   const errors = attachUncaughtGuard(page)
-  await page.goto('/?rack=HELLOAB&nogl=1')
-  const faces = ['H', 'E', 'L', 'L', 'O']
-  const squares = ['H8', 'I8', 'J8', 'K8', 'L8']
+  await page.goto('/?nogl=1')
+  // Start route isolation (issue #86): exactly one heading, no table.
+  expect(await page.locator('h1').count()).toBe(1)
+  await expect(page.locator('main.table')).toHaveCount(0)
+  await expect(page.locator('#rack')).toHaveCount(0)
+  // Start → setup → lobby → table through the UI flow.
+  await page.locator('.screen-start [data-action="play"]').click()
+  await expect(page.locator('#seat-picker')).toBeVisible()
+  await page.locator('#start-game').click()
+  await expect(page.locator('#lobby-start')).toBeVisible()
+  await page.locator('#lobby-start').click()
+  await expect(page.locator('.screen-table #pass-button')).toBeVisible()
+  // Deterministic reseed: seed 5 deals CAT through the star.
+  await page.evaluate(() =>
+    window.__wordtable.startSession(['Ann', 'Bo'], [false, false], 5),
+  )
+  const faces = ['C', 'A', 'T']
+  const squares = ['H8', 'I8', 'J8']
   for (let k = 0; k < faces.length; k++) {
-    // Tap-tap: select the rack tile by face (indices shift as tiles
-    // leave the rack), then tap the target square.
+    // Tap-tap: select the rack tile by face, then tap the target square.
     await page.locator(`#rack .tile[data-tile="${faces[k]}"]`).first().click()
     await page.locator(`.sq[data-sq="${squares[k]}"]`).click()
   }
   await expect(page.locator('#prov-score')).not.toHaveText('0 pts')
-  await page.locator('.table-actions [data-action="play"]').click()
-  await expect(page.locator('.tile.last-move')).toHaveCount(5)
+  await page.locator('#commit-button').click()
+  await expect(page.locator('.tile.last-move')).toHaveCount(3)
   const floatText = await page.locator('#float-score').textContent({ timeout: 2000 })
   expect(floatText ?? '').toContain('+')
   expectNoUncaught(errors)
@@ -119,7 +133,18 @@ test('online reload resumes the same turn with committed tiles', async ({ browse
       ]),
     )
     expect(placed.ok).toBe(true)
-    await expect(pageA.locator('.tile.last-move')).toHaveCount(5)
+    // The start route is headless now (issue #86): assert committed
+    // tiles through the hook instead of a DOM board.
+    const tilesBefore = (await pageA.evaluate(
+      () => window.__wordtable.getState().boardTiles,
+    )) as Record<string, string>
+    expect(Object.keys(tilesBefore).sort()).toEqual([
+      'H8',
+      'I8',
+      'J8',
+      'K8',
+      'L8',
+    ])
     const turnBefore = (await pageA.evaluate(
       () => window.__wordtable.getState().turn,
     )) as number
@@ -132,7 +157,10 @@ test('online reload resumes the same turn with committed tiles', async ({ browse
       () => window.__wordtable.getState().turn,
     )) as number
     expect(turnAfter).toBe(turnBefore)
-    await expect(pageA.locator('.tile.last-move')).toHaveCount(5)
+    const tilesAfter = (await pageA.evaluate(
+      () => window.__wordtable.getState().boardTiles,
+    )) as Record<string, string>
+    expect(tilesAfter).toEqual(tilesBefore)
   } finally {
     expectNoUncaught(errorsA)
     expectNoUncaught(errorsB)

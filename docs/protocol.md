@@ -28,7 +28,7 @@ It is identical to `../docs/protocol.md` in the Godot prototype repo
 | `rematch` | host `code`+`token` | `started:true`, `turn`, `scores` |
 | `place_tiles` (`place`) | turn seat `code`+`token`, `tiles` | `accepted:true`, `points`, `turn`, `scores`, `over` |
 | `pass` (`pass_turn`) | turn seat `code`+`token` | `accepted:true`, `turn` |
-| `exchange` | turn seat `code`+`token`, `count` | `accepted:true`, `turn` |
+| `exchange` | turn seat `code`+`token`, `count` or `tiles` (face strings, `?` = blank) | `accepted:true`, `turn` |
 | `recall` | turn seat `code`+`token` | `recalled`, `rack`, `turn` |
 | `shuffle_rack` (`shuffle`) | turn seat `code`+`token` | `rack`, `turn` |
 | `get_rack` (`rack`) | `code`+`token` | private `rack`, `seat`/`you`, `turn` |

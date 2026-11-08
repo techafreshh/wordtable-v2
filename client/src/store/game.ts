@@ -16,6 +16,7 @@ import {
 } from '../../../shared/engine/rules'
 import { TileBag, type Tile } from '../../../shared/engine/bag'
 import { isLegalWord } from './lexicon'
+import { uiStore } from './ui'
 
 export interface PendingTile {
   id: number
@@ -337,6 +338,10 @@ export const gameStore = createStore<GameStoreState>()((set, get) => {
       bag = new TileBag(1)
       commitState([...rack, ...returned], [], null)
       set({ board: emptyGrid(), lastMove: [], lastScore: null })
+      // Offline loop owns the strip on this path: a board reset zeroes
+      // seat totals (seats/turn/chat survive — no resetTable here).
+      const { seats } = uiStore.getState()
+      uiStore.getState().setScores(seats.map(() => 0))
     },
 
     // Online projection (issue #14): rebuild board + rack from the
@@ -459,6 +464,11 @@ export const gameStore = createStore<GameStoreState>()((set, get) => {
         provScore: 0,
         provWords: [],
       })
+      // Offline loop owns the strip on this path: credit the acting seat.
+      const ui = uiStore.getState()
+      const seat = Math.min(Math.max(0, ui.turn), ui.seats.length - 1)
+      const totals = ui.seats.map((_, i) => (i === seat ? (ui.scores[i] ?? 0) + check.score : (ui.scores[i] ?? 0)))
+      ui.setScores(totals)
       return { ok: true, points: check.score, words: [...check.words] }
     },
   }
